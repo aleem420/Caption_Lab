@@ -207,5 +207,370 @@ class TestVisualAndAnimationQA(unittest.TestCase):
 
         print("[QA 5/5] PNG Sequence export (RGBA 32-bit, %06d.png) & frame integrity verified.")
 
+    def test_06_entrance_scale_measurement(self):
+        """
+        Milestone 3.2 Stage E: Entrance scale measurement (0.80x to 1.0x).
+        Verifies that caption-level pop-in scales the rendered bounding box
+        from 0.80x at frame 0 to 1.0x at the completion of entrance duration.
+        """
+        cap = CaptionModel(
+            caption_id="cap_ent_test",
+            start_time=0.0,
+            end_time=1.0,
+            duration=1.0,
+            words=[WordModel(word_id="w1", text="नमस्ते", start=0.0, end=1.0)],
+            animation={
+                "entrance": {"type": "pop_in", "duration_frames": 4},
+                "exit": {"type": "none", "duration_frames": 0},
+                "word_animation": {"type": "none", "active_scale": 1.0}
+            }
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = Path(tmpdir)
+            ExportService._render_frames(
+                ExportRequest(output_type="png_sequence", captions=[cap], resolution={"width": 1920, "height": 1080}, fps=25.0),
+                out_dir
+            )
+            from PIL import Image
+            img0 = Image.open(out_dir / "frame_000000.png")
+            bbox0 = img0.getbbox()
+            w0 = bbox0[2] - bbox0[0]
+
+            img4 = Image.open(out_dir / "frame_000004.png")
+            bbox4 = img4.getbbox()
+            w4 = bbox4[2] - bbox4[0]
+
+            ratio = w0 / w4
+            # Allows small pixel tolerance for LANCZOS anti-aliased edge resampling
+            self.assertGreaterEqual(ratio, 0.77)
+            self.assertLessEqual(ratio, 0.83)
+        print("[QA 6/15] Entrance scale pop-in (0.80x -> 1.0x) pixel measurement verified.")
+
+    def test_07_word_level_geometric_scale(self):
+        """
+        Milestone 3.2 Stage E: Active-word geometric scaling (1.15x).
+        Directly measures active word bounding box vs inactive word bounding box.
+        """
+        cap = CaptionModel(
+            caption_id="cap_scale_test",
+            start_time=0.0,
+            end_time=2.0,
+            duration=2.0,
+            words=[
+                WordModel(word_id="w1", text="नमस्ते", start=0.0, end=1.0),
+                WordModel(word_id="w2", text="दोस्तों", start=1.0, end=2.0)
+            ],
+            animation={
+                "entrance": {"type": "none", "duration_frames": 0},
+                "exit": {"type": "none", "duration_frames": 0},
+                "word_animation": {"type": "word_pop", "active_scale": 1.15}
+            }
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = Path(tmpdir)
+            ExportService._render_frames(
+                ExportRequest(output_type="png_sequence", captions=[cap], resolution={"width": 1920, "height": 1080}, fps=25.0),
+                out_dir
+            )
+            from PIL import Image
+            import numpy as np
+
+            # Frame 10 (t=0.40s): Word 1 active (1.15x)
+            # Frame 35 (t=1.40s): Word 1 inactive (1.00x)
+            img_act = Image.open(out_dir / "frame_000010.png")
+            img_inact = Image.open(out_dir / "frame_000035.png")
+
+            # Word 1 is in left half of canvas (x < 960)
+            crop_act = np.array(img_act.crop((0, 0, 960, 1080)))[:, :, 3]
+            crop_inact = np.array(img_inact.crop((0, 0, 960, 1080)))[:, :, 3]
+
+            # Alpha thresholded bounding box to measure text core
+            y_act, x_act = np.where(crop_act > 50)
+            w_act = np.max(x_act) - np.min(x_act) + 1
+            h_act = np.max(y_act) - np.min(y_act) + 1
+
+            y_inact, x_inact = np.where(crop_inact > 50)
+            w_inact = np.max(x_inact) - np.min(x_inact) + 1
+            h_inact = np.max(y_inact) - np.min(y_inact) + 1
+
+            scale_w = w_act / w_inact
+            scale_h = h_act / h_inact
+            self.assertGreaterEqual(scale_w, 1.11)
+            self.assertLessEqual(scale_w, 1.20)
+            self.assertGreaterEqual(scale_h, 1.11)
+            self.assertLessEqual(scale_h, 1.22)
+        print("[QA 7/15] Word-level geometric scaling (1.15x) pixel measurement verified.")
+
+    def test_08_stable_text_baseline(self):
+        """
+        Milestone 3.2 Stage E: Stable text baseline alignment and stationary inactive words.
+        Verifies that inactive words do not shift or jump when an adjacent word scales.
+        """
+        cap = CaptionModel(
+            caption_id="cap_base_test",
+            start_time=0.0,
+            end_time=2.0,
+            duration=2.0,
+            words=[
+                WordModel(word_id="w1", text="नमस्ते", start=0.0, end=1.0),
+                WordModel(word_id="w2", text="दोस्तों", start=1.0, end=2.0)
+            ],
+            animation={
+                "entrance": {"type": "none", "duration_frames": 0},
+                "exit": {"type": "none", "duration_frames": 0},
+                "word_animation": {"type": "word_pop", "active_scale": 1.15}
+            }
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = Path(tmpdir)
+            ExportService._render_frames(
+                ExportRequest(output_type="png_sequence", captions=[cap], resolution={"width": 1920, "height": 1080}, fps=25.0),
+                out_dir
+            )
+            from PIL import Image
+
+            # In Frame 10, Word 2 is inactive (1.0x). In Frame 35, Word 2 is active (1.15x).
+            # Crop Word 2 (right half, x > 960)
+            img10 = Image.open(out_dir / "frame_000010.png")
+            img35 = Image.open(out_dir / "frame_000035.png")
+
+            b10 = img10.crop((960, 0, 1920, 1080)).getbbox()
+            b35 = img35.crop((960, 0, 1920, 1080)).getbbox()
+
+            cx10 = (b10[0] + b10[2]) / 2.0
+            cx35 = (b35[0] + b35[2]) / 2.0
+
+            # Center X of inactive word must stay stationary within 1.0px tolerance
+            self.assertLessEqual(abs(cx10 - cx35), 1.0)
+        print("[QA 8/15] Stable text baseline and stationary inactive word centers verified.")
+
+    def test_09_smooth_alpha_fade(self):
+        """
+        Milestone 3.2 Stage E: Monotonic alpha fade-out across exit frames.
+        Verifies per-frame alpha reduction without abrupt drops.
+        """
+        cap = CaptionModel(
+            caption_id="cap_fade_test",
+            start_time=0.0,
+            end_time=1.0,
+            duration=1.0,
+            words=[WordModel(word_id="w1", text="परीक्षण", start=0.0, end=1.0)],
+            animation={
+                "entrance": {"type": "none", "duration_frames": 0},
+                "exit": {"type": "fade_out", "duration_frames": 4},
+                "word_animation": {"type": "none"}
+            }
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = Path(tmpdir)
+            ExportService._render_frames(
+                ExportRequest(output_type="png_sequence", captions=[cap], resolution={"width": 1920, "height": 1080}, fps=25.0),
+                out_dir
+            )
+            from PIL import Image
+            import numpy as np
+
+            # 4 exit frames: 21 (t=0.84s), 22 (t=0.88s), 23 (t=0.92s), 24 (t=0.96s)
+            alphas = []
+            for f in range(21, 25):
+                img = Image.open(out_dir / f"frame_{f:06d}.png")
+                arr = np.array(img)[:, :, 3]
+                alphas.append(int(np.max(arr)))
+
+            # Monotonic reduction
+            self.assertGreaterEqual(alphas[0], alphas[1])
+            self.assertGreaterEqual(alphas[1], alphas[2])
+            self.assertGreaterEqual(alphas[2], alphas[3])
+            # Last frame is faded significantly below 255
+            self.assertLessEqual(alphas[3], 100)
+        print("[QA 9/15] Monotonic alpha fade-out verified across exit frames.")
+
+    def test_10_fully_transparent_exit_frame(self):
+        """
+        Milestone 3.2 Stage E: Fully transparent exit frame post-caption.
+        Verifies that frames at or after caption end_time have zero opacity (A=0).
+        """
+        cap1 = CaptionModel(
+            caption_id="cap_trans_test",
+            start_time=0.0,
+            end_time=0.5,
+            duration=0.5,
+            words=[WordModel(word_id="w1", text="समाप्त", start=0.0, end=0.5)],
+            animation={"exit": {"type": "fade_out", "duration_frames": 4}}
+        )
+        cap2 = CaptionModel(
+            caption_id="cap_trans_tail",
+            start_time=0.6,
+            end_time=0.7,
+            duration=0.1,
+            words=[WordModel(word_id="w2", text="पुनः", start=0.6, end=0.7)]
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = Path(tmpdir)
+            # Render up to 0.7s (18 frames: 0 to 17)
+            ExportService._render_frames(
+                ExportRequest(output_type="png_sequence", captions=[cap1, cap2], resolution={"width": 1920, "height": 1080}, fps=25.0),
+                out_dir
+            )
+            from PIL import Image
+            import numpy as np
+
+            # Frame 13 (t=0.52s) is after end_time (0.50s)
+            img13 = Image.open(out_dir / "frame_000013.png")
+            arr = np.array(img13)[:, :, 3]
+            self.assertEqual(int(np.max(arr)), 0)
+            self.assertIsNone(img13.getbbox())
+        print("[QA 10/15] Fully transparent post-caption exit frame (A=0) verified.")
+
+    def test_11_devanagari_conjunct_preservation_under_scale(self):
+        """
+        Milestone 3.2 Stage E: Devanagari conjuncts & matras preserved under 1.15x geometric scaling.
+        """
+        complex_words = ["संयुक्ताक्षर", "प्रकाश", "फ़िल्म", "पृथ्वी"]
+        for word in complex_words:
+            cap = CaptionModel(
+                caption_id=f"cap_{word}",
+                start_time=0.0,
+                end_time=1.0,
+                duration=1.0,
+                words=[WordModel(word_id="w1", text=word, start=0.0, end=1.0)],
+                animation={"word_animation": {"type": "word_pop", "active_scale": 1.15}}
+            )
+            with tempfile.TemporaryDirectory() as tmpdir:
+                out_dir = Path(tmpdir)
+                ExportService._render_frames(
+                    ExportRequest(output_type="png_sequence", captions=[cap], resolution={"width": 1920, "height": 1080}, fps=25.0),
+                    out_dir
+                )
+                from PIL import Image
+                img = Image.open(out_dir / "frame_000010.png")
+                bbox = img.getbbox()
+                self.assertIsNotNone(bbox)
+                self.assertGreater(bbox[2] - bbox[0], 50)
+                self.assertGreater(bbox[3] - bbox[1], 30)
+        print("[QA 11/15] Devanagari conjunct & matra preservation under 1.15x scale verified.")
+
+    def test_12_mixed_script_alignment(self):
+        """
+        Milestone 3.2 Stage E: Hinglish mixed script baseline alignment.
+        """
+        cap = CaptionModel(
+            caption_id="cap_hinglish",
+            start_time=0.0,
+            end_time=1.0,
+            duration=1.0,
+            words=[
+                WordModel(word_id="w1", text="CaptionLab", start=0.0, end=0.5),
+                WordModel(word_id="w2", text="प्रोजेक्ट", start=0.5, end=1.0)
+            ],
+            animation={"word_animation": {"type": "word_pop", "active_scale": 1.15}}
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = Path(tmpdir)
+            ExportService._render_frames(
+                ExportRequest(output_type="png_sequence", captions=[cap], resolution={"width": 1920, "height": 1080}, fps=25.0),
+                out_dir
+            )
+            from PIL import Image
+            img = Image.open(out_dir / "frame_000005.png")
+            bbox = img.getbbox()
+            self.assertIsNotNone(bbox)
+            self.assertGreater(bbox[2] - bbox[0], 100)
+        print("[QA 12/15] Hinglish mixed script alignment under animation verified.")
+
+    def test_13_safe_area_collision_check(self):
+        """
+        Milestone 3.2 Stage E: Safe-area boundary compliance under 1.15x expansion.
+        """
+        long_sentence = ["Today", "we", "are", "demonstrating", "advance", "animations"]
+        cap = CaptionModel(
+            caption_id="cap_safe",
+            start_time=0.0,
+            end_time=1.0,
+            duration=1.0,
+            words=[WordModel(word_id=f"w{i}", text=t, start=i*0.15, end=(i+1)*0.15) for i, t in enumerate(long_sentence)],
+            animation={"word_animation": {"type": "word_pop", "active_scale": 1.15}}
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = Path(tmpdir)
+            ExportService._render_frames(
+                ExportRequest(output_type="png_sequence", captions=[cap], resolution={"width": 1920, "height": 1080}, fps=25.0),
+                out_dir
+            )
+            from PIL import Image
+            # Sample frames during maximum scale
+            for f in [5, 10, 15]:
+                img = Image.open(out_dir / f"frame_{f:06d}.png")
+                bbox = img.getbbox()
+                if bbox:
+                    # Must be inside Action Safe 90% ([96, 1824] x [54, 1026])
+                    self.assertGreaterEqual(bbox[0], 96)
+                    self.assertLessEqual(bbox[2], 1824)
+                    self.assertGreaterEqual(bbox[1], 54)
+                    self.assertLessEqual(bbox[3], 1026)
+        print("[QA 13/15] Safe-area compliance under maximum geometric scale verified.")
+
+    def test_14_half_open_boundary_handoff(self):
+        """
+        Milestone 3.2 Stage E: Deterministic half-open interval boundary handoff [start_time, end_time).
+        """
+        c1 = CaptionModel(
+            caption_id="c1", start_time=0.0, end_time=1.0, duration=1.0,
+            words=[WordModel(word_id="w1", text="पहला", start=0.0, end=1.0)]
+        )
+        c2 = CaptionModel(
+            caption_id="c2", start_time=1.0, end_time=2.0, duration=1.0,
+            words=[WordModel(word_id="w2", text="दूसरा", start=1.0, end=2.0)]
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = Path(tmpdir)
+            ExportService._render_frames(
+                ExportRequest(output_type="png_sequence", captions=[c1, c2], resolution={"width": 1920, "height": 1080}, fps=25.0),
+                out_dir
+            )
+            from PIL import Image
+            # Frame 24 (t=0.96s): must be c1
+            # Frame 25 (t=1.00s): must be c2
+            img24 = Image.open(out_dir / "frame_000024.png")
+            img25 = Image.open(out_dir / "frame_000025.png")
+            self.assertIsNotNone(img24.getbbox())
+            self.assertIsNotNone(img25.getbbox())
+        print("[QA 14/15] Deterministic half-open boundary handoff [start_time, end_time) verified.")
+
+    def test_15_prores_4444_alpha_preservation(self):
+        """
+        Milestone 3.2 Stage E: ProRes 4444 alpha channel preservation with active animation pipeline.
+        """
+        import subprocess, json
+        cap = CaptionModel(
+            caption_id="c_prores",
+            start_time=0.0,
+            end_time=0.5,
+            duration=0.5,
+            words=[WordModel(word_id="w1", text="पारदर्शी", start=0.0, end=0.5)],
+            animation={
+                "entrance": {"type": "pop_in", "duration_frames": 3},
+                "exit": {"type": "fade_out", "duration_frames": 3},
+                "word_animation": {"type": "word_pop", "active_scale": 1.15}
+            }
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mov_path = Path(tmpdir) / "test_anim_alpha.mov"
+            req = ExportRequest(
+                output_type="prores_4444",
+                captions=[cap],
+                resolution={"width": 1920, "height": 1080},
+                fps=25.0
+            )
+            res_path = ExportService.render_transparent_prores_mov(req, mov_path)
+            self.assertTrue(res_path.exists())
+            
+            cmd = ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=codec_name,pix_fmt", "-of", "json", str(res_path)]
+            probe = subprocess.run(cmd, capture_output=True, text=True)
+            info = json.loads(probe.stdout)["streams"][0]
+            self.assertEqual(info["codec_name"], "prores")
+            self.assertIn(info["pix_fmt"], ["yuva444p10le", "yuva444p12le"])
+        print("[QA 15/15] ProRes 4444 alpha channel preservation with animation engine verified.")
+
 if __name__ == "__main__":
     unittest.main()

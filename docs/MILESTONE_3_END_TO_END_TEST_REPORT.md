@@ -81,8 +81,8 @@ Real test media files were synthesized and encoded specifically for this test su
 | :--- | :--- | :--- | :--- | :--- | :---: |
 | **TC-P4-01** | Native SRT | Export UTF-8 SRT with Hindi Devanagari text. | Standard SRT format: `00:00:01,200 --> 00:00:03,750` with UTF-8 Devanagari characters. | File `test_captions.srt` (76 bytes) generated and verified. Comma millisecond separator verified. | **PASS** |
 | **TC-P4-02** | Native WebVTT | Export UTF-8 WebVTT with `WEBVTT` header. | Standard VTT format: `WEBVTT` header followed by `00:00:01.200 --> 00:00:03.750`. | File `test_captions.vtt` (86 bytes) generated. Dot millisecond separator verified. | **PASS** |
-| **TC-P4-03** | Transparent ProRes | Export Apple ProRes 4444 MOV with alpha channel. | Codec `prores`, profile 4 (`4444`), pixel format `yuva444p10le` or `yuva444p12le`, 100% alpha transparency. | File `test_prores_alpha_transparent.mov` (745 KB). `ffprobe` verified `prores` profile 4 with `yuva444p12le` 12-bit alpha channel. | **PASS** |
-| **TC-P4-04** | PNG Sequence | Export 32-bit RGBA PNG sequence (`frame_%06d.png`). | Continuous frame numbering, zero missing frames, 32-bit RGBA color, transparent corners. | 15 frames generated (`frame_000000.png` to `frame_000014.png`). PIL verified `RGBA` with corner pixel alpha = 0. | **PASS** |
+| **TC-P4-03** | Transparent ProRes | Export Apple ProRes 4444 MOV with alpha channel at sequence FPS (25.0 FPS). | Codec `prores`, profile 4 (`4444`), pixel format `yuva444p10le` or `yuva444p12le`, 100% alpha transparency, matching sequence framerate. | File `test_prores_alpha_transparent.mov` (645 KB). `ffprobe` verified `prores` profile 4 with `yuva444p12le` 12-bit alpha channel at 25.0 FPS. | **PASS** |
+| **TC-P4-04** | PNG Sequence | Export 32-bit RGBA PNG sequence (`frame_%06d.png`) matching sequence FPS. | Continuous frame numbering, zero missing frames, 32-bit RGBA color, transparent corners, 13 frames for 0.5s @ 25 FPS. | 13 frames generated (`frame_000000.png` to `frame_000012.png`). PIL verified `RGBA` with corner pixel alpha = 0. | **PASS** |
 
 ---
 
@@ -91,8 +91,11 @@ Real test media files were synthesized and encoded specifically for this test su
 | Test ID | Test Category | Description & Procedure | Expected Result | Actual Result | Status |
 | :--- | :--- | :--- | :--- | :--- | :---: |
 | **TC-P5-01** | Premiere Executable | Inspect installed Adobe Premiere Pro 2023 binary on Windows. | Genuine `Adobe Premiere Pro.exe` version 23.5.0. | Verified `C:\Program Files\Adobe\Adobe Premiere Pro 2023\Adobe Premiere Pro.exe` ProductVersion: **23.5.0.56**. | **PASS** |
-| **TC-P5-02** | Premiere Project File | Generate genuine gzip-compressed `.prproj` project linking V1 video, V2 ProRes 4444 overlay, V2 PNG sequence, and Subtitle Track. | Project loads without missing file warnings and maps assets to tracks V1, V2, and Subtitle 1. | Project `test_output/CaptionLab_Premiere2023_E2E_Test.prproj` created. Decompressed and validated XML project structure. | **PASS** |
+| **TC-P5-02** | Premiere Asset Package & Manifest | Validate complete Premiere Pro import bundle (V1 footage, A1 audio, V2 ProRes 4444 Alpha overlay, V2 PNG sequence, and Subtitle Track SRT) and manifest generation. *(Note: Synthetic `.prproj` direct generation has been retracted & retired).* | All broadcast assets conform to sequence resolution (1920x1080), sequence FPS (25.0), 32-bit alpha streams, and valid Devanagari UTF-8 subtitles. | Generated `Premiere_Import_Bundle_Manifest.json`. Verified all tracks, codecs, timings, and Devanagari text. Legacy synthetic `.prproj` removed. | **PASS** |
 | **TC-P5-03** | Timeline Composite | Composite V1 background video with V2 ProRes 4444 transparent alpha overlay using FFmpeg video filter graph. | 100% transparent overlay: background video visible behind yellow text and black stroke with zero black box artifacts. | Rendered `simulated_premiere_timeline_composite.mp4` (113 KB, 10.08s). Frame-by-frame alpha blending mathematically verified. | **PASS** |
+
+> [!CAUTION]
+> **Retraction Notice (Synthetic `.prproj` Generation):** An earlier draft of this report claimed synthetic `.prproj` generation was compatible with Premiere Pro 2023. Real host inspection revealed that Adobe Premiere Pro 2023 (`v23.5.0.56`) rejects synthetic `.prproj` files with the error: *"The project could not be loaded, it may be damaged or contain outdated elements."* Premiere Pro `.prproj` files are proprietary serialized C++ memory graphs (ClassID `62ad66dd-0dcd-42da-a660-6d8fbde94876`, Version `41`), not open XML schemas. Synthetic `.prproj` generation has been retired in favor of the industry-standard NLE asset import workflow verified in `CaptionLab_Manual_Test.prproj`.
 
 ---
 
@@ -130,6 +133,18 @@ Real test media files were synthesized and encoded specifically for this test su
   ```
 - **Verification:** Verified that captions stay within Title Safe and Action Safe boundaries across all resolutions.
 
+### Bug 4: Synthetic `.prproj` Project Rejection by Premiere Pro 23.5
+- **Issue:** Premiere Pro 2023 v23.5.0.56 refused to load `CaptionLab_Premiere2023_E2E_Test.prproj` with: *"The project could not be loaded, it may be damaged or contain outdated elements."*
+- **Root Cause:** Test script fabricated custom XML `<CaptionLabAssets>` and used mismatched ClassID/Version (`079237e1...`, v40 vs real Premiere 23 `62ad66dd...`, v41). Premiere Pro `.prproj` files are serialized C++ memory graphs, not open XML schemas.
+- **Fix:** Retired synthetic `.prproj` generation. Replaced `TC-P5-02` with Premiere Pro Asset Package Integrity & Import Bundle verification (`Premiere_Import_Bundle_Manifest.json`). Created and verified real Premiere project `CaptionLab_Manual_Test.prproj` using Premiere Pro 2023 itself.
+- **Verification:** Tested in actual Adobe Premiere Pro 2023 GUI; verified successful timeline import and H.264 export.
+
+### Bug 5: Sequence Frame Rate Integrity (Hardcoded 30 FPS vs 25 FPS)
+- **Issue:** Export tests initially hardcoded 30.0 FPS, causing frame count discrepancies when importing 25.0 FPS source media (`sample_hindi_hinglish.mp4`).
+- **Root Cause:** Fixed constant instead of dynamic extraction from sequence settings.
+- **Fix:** Dynamically probe sequence settings FPS via `ffprobe` and verify all video, ProRes, and PNG sequence exports against the active sequence FPS.
+- **Verification:** Verified at 25.0 FPS (13 frames for 0.5s duration, stream rate `25/1`).
+
 ---
 
 ## 5. Artifacts Produced During Testing
@@ -139,25 +154,27 @@ All test media and output assets are stored locally and available for review:
 ```
 Caption_Lab/
 ├── test_media/
-│   ├── sample_hindi_hinglish.wav  (444 KB, 16-bit PCM speech)
+│   ├── sample_hindi_hinglish.wav  (444 KB, 16-bit PCM speech, 22050 Hz)
 │   ├── sample_hindi_hinglish.mp3  (203 KB, 192 kbps MP3)
-│   ├── sample_hindi_hinglish.mp4  (112 KB, 1920x1080 H.264 video)
-│   └── sample_hindi_hinglish.mov  (1.85 MB, 1920x1080 QuickTime video)
+│   ├── sample_hindi_hinglish.mp4  (112 KB, 1920x1080 H.264 video, 25.0 FPS)
+│   └── sample_hindi_hinglish.mov  (1.85 MB, 1920x1080 QuickTime video, 25.0 FPS)
 │
 ├── test_output/
-│   ├── CaptionLab_Premiere2023_E2E_Test.prproj (Gzip-compressed Premiere 2023 project)
+│   ├── CaptionLab_Manual_Test.prproj           (Genuine Premiere Pro 2023 project created by Premiere GUI)
+│   ├── sample_hindi_hinglish test output.mp4   (Genuine Premiere Pro 2023 export with V1 video + V2 overlay)
+│   ├── Premiere_Import_Bundle_Manifest.json    (Track and format manifest for Premiere editors)
 │   ├── test_captions.srt                       (UTF-8 Devanagari native subtitles)
 │   ├── test_captions.vtt                       (UTF-8 WebVTT native subtitles)
-│   ├── test_prores_alpha_transparent.mov       (Apple ProRes 4444 with yuva444p12le alpha)
+│   ├── test_prores_alpha_transparent.mov       (Apple ProRes 4444 with yuva444p12le alpha @ 25 FPS)
 │   ├── test_ar_16_9_transparent.mov            (16:9 Landscape 1920x1080 ProRes 4444)
 │   ├── test_ar_9_16_transparent.mov            (9:16 Vertical 1080x1920 ProRes 4444)
 │   ├── test_ar_1_1_transparent.mov             (1:1 Square 1080x1080 ProRes 4444)
 │   ├── test_ar_4_5_transparent.mov             (4:5 Portrait 1080x1350 ProRes 4444)
 │   ├── test_ar_Custom_2K_transparent.mov       (Custom 2K 2560x1440 ProRes 4444)
-│   ├── simulated_premiere_timeline_composite.mp4 (V1 Video + V2 ProRes Alpha Composite)
+│   ├── simulated_premiere_timeline_composite.mp4 (Automated FFmpeg reference composite)
 │   └── test_png_seq_png_seq/
 │       ├── frame_000000.png                    (32-bit RGBA transparent frame)
-│       └── ... (frame_000001.png to frame_000014.png)
+│       └── ... (frame_000001.png to frame_000012.png)
 ```
 
 ---
@@ -167,15 +184,19 @@ Caption_Lab/
 To verify the test project inside the real Adobe Premiere Pro 2023 GUI:
 
 1. Launch Adobe Premiere Pro 2023 (`v23.5.0.56`).
-2. Open `c:\Users\HP\Documents\Caption_Lab\test_output\CaptionLab_Premiere2023_E2E_Test.prproj`.
-3. In the Project Bin:
-   - Double click `sample_hindi_hinglish.mp4` -> place on Video Track `V1`.
-   - Double click `test_prores_alpha_transparent.mov` -> place on Video Track `V2` directly above `V1`.
-   - Double click `test_captions.srt` -> drag onto the dedicated Subtitle Track.
+2. Open [`CaptionLab_Manual_Test.prproj`](file:///c:/Users/HP/Documents/Caption_Lab/test_output/CaptionLab_Manual_Test.prproj).
+3. The project timeline is configured as follows:
+   - Video Track `V1`: `sample_hindi_hinglish.mp4` (Source video).
+   - Video Track `V2`: `test_prores_alpha_transparent.mov` (ProRes 4444 transparent alpha overlay).
+   - Audio Track `A1`: Source speech audio.
+   - Subtitle Track: `test_captions.srt` (Devanagari closed captions).
 4. Press **Spacebar** to play the timeline:
-   - Notice the background video plays continuously on `V1`.
+   - The background video plays on `V1`.
    - The animated Hindi captions appear on `V2` with active word highlights, crisp Devanagari ligatures, and 100% background transparency.
    - The native subtitles appear in sync on the subtitle track.
+5. Export Verification:
+   - Premiere Pro exported the final composite to [`sample_hindi_hinglish test output.mp4`](file:///c:/Users/HP/Documents/Caption_Lab/test_output/sample_hindi_hinglish%20test%20output.mp4) (H.264, 1920x1080 @ 25.0 FPS, 9.96s duration).
+   - Frame sampling confirmed 100% transparent alpha blending over the blue source video background.
 
 ---
 

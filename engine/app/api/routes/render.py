@@ -34,8 +34,8 @@ def export_captions(request: ExportRequest) -> Dict[str, Any]:
     # 3. Transparent Apple ProRes 4444 MOV
     if request.output_type in ["prores_4444", "both", "all"]:
         mov_path = output_dir / f"{request.filename_prefix}_transparent.mov"
-        ExportService.render_transparent_prores_mov(request, mov_path)
-        results["mov_path"] = str(mov_path.resolve())
+        actual_mov_path = ExportService.render_transparent_prores_mov(request, mov_path)
+        results["mov_path"] = str(actual_mov_path.resolve())
 
     # 4. PNG Sequence (Milestone 3 C)
     if request.output_type in ["png_sequence", "all"]:

@@ -22,6 +22,7 @@ build/
 .coverage
 htmlcov/
 *.log
+engine/scratch/
 
 # AI Models & Audio Cache (stored locally, not in git)
 engine/models_cache/
