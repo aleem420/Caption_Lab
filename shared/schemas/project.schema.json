@@ -1,0 +1,102 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CaptionLabProject",
+  "description": "CaptionLab Project Data Schema v1.2",
+  "type": "object",
+  "required": ["project", "transcript", "captions"],
+  "properties": {
+    "project": {
+      "type": "object",
+      "required": ["id", "name", "version", "fps", "width", "height"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "version": { "type": "string" },
+        "created_at": { "type": "string" },
+        "updated_at": { "type": "string" },
+        "fps": { "type": "number", "minimum": 1 },
+        "width": { "type": "integer", "minimum": 1 },
+        "height": { "type": "integer", "minimum": 1 },
+        "audio_source_path": { "type": ["string", "null"] },
+        "video_source_path": { "type": ["string", "null"] }
+      }
+    },
+    "transcript": {
+      "type": "object",
+      "required": ["language", "words"],
+      "properties": {
+        "language": { "type": "string", "default": "hindi_mixed" },
+        "engine": { "type": "string", "default": "faster-whisper" },
+        "model_size": { "type": "string", "enum": ["tiny", "base", "small", "medium", "large"] },
+        "sentences": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["sentence_id", "start", "end", "text", "words"]
+          }
+        },
+        "words": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["word_id", "text", "start", "end", "corrected"],
+            "properties": {
+              "word_id": { "type": "string" },
+              "text": { "type": "string" },
+              "start": { "type": "number", "minimum": 0 },
+              "end": { "type": "number", "minimum": 0 },
+              "confidence": { "type": ["number", "null"] },
+              "speaker_id": { "type": ["string", "null"] },
+              "corrected": { "type": "boolean", "default": false }
+            }
+          }
+        }
+      }
+    },
+    "captions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["caption_id", "start_time", "end_time", "words", "layout_family", "coordinates"],
+        "properties": {
+          "caption_id": { "type": "string" },
+          "start_frame": { "type": "integer" },
+          "end_frame": { "type": "integer" },
+          "start_time": { "type": "number" },
+          "end_time": { "type": "number" },
+          "duration": { "type": "number" },
+          "layout_family": {
+            "type": "string",
+            "enum": [
+              "single_line",
+              "balanced_two_line",
+              "stacked",
+              "keyword_highlight",
+              "word_by_word",
+              "speaker_based",
+              "boxed",
+              "cinematic"
+            ]
+          },
+          "coordinates": {
+            "type": "object",
+            "required": ["x", "y", "width", "height"],
+            "properties": {
+              "x": { "type": "number" },
+              "y": { "type": "number" },
+              "width": { "type": "number" },
+              "height": { "type": "number" }
+            }
+          }
+        }
+      }
+    },
+    "presets": {
+      "type": "array",
+      "items": { "type": "object" }
+    },
+    "export_settings": {
+      "type": "object"
+    }
+  }
+}

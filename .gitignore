@@ -1,0 +1,52 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Python Virtual Environments
+.venv/
+venv/
+ENV/
+env/
+
+# Node / Frontend
+node_modules/
+dist/
+dist-uxp/
+build/
+.pnpm-store/
+
+# Cache & Temporary files
+.cache/
+.pytest_cache/
+.coverage
+htmlcov/
+*.log
+
+# AI Models & Audio Cache (stored locally, not in git)
+engine/models_cache/
+engine/audio_cache/
+engine/renders/
+*.tmp
+*.mov
+*.mp4
+*.wav
+*.mp3
+
+# Playwright
+test-results/
+playwright-report/
+
+# OS Specific
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*.swo
+
+# IDE & Editor
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+.idea/
