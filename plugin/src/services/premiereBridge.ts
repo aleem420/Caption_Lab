@@ -1,7 +1,7 @@
 /**
- * Premiere Pro UXP Integration Bridge
+ * Premiere Pro UXP Integration Bridge & Audio Extraction Guidance
  * Target: Premiere Pro 2025+ (v25+)
- * Handles active sequence inspection and verified import/export fallback workflow (PRD Section 17).
+ * Phase 2 & 3: Hybrid Audio Architecture (Direct Media, Sequence Audio Mixdown, Multiple Tracks)
  */
 
 export interface SequenceInfo {
@@ -12,14 +12,13 @@ export interface SequenceInfo {
   durationSeconds: number;
   playheadPosition: number;
   hasAudio: boolean;
-  isAvailable: boolean;
+  isAvailableInHost: boolean;
+  notes: string;
 }
 
 export class PremiereBridge {
   static getSequenceInfo(): SequenceInfo {
     try {
-      // Check if running inside Adobe UXP host environment
-      const uxp = (window as any).require ? (window as any).require('uxp') : null;
       const premiere = (window as any).require ? (window as any).require('premierepro') : null;
 
       if (premiere && premiere.app && premiere.app.project && premiere.app.project.activeSequence) {
@@ -33,14 +32,15 @@ export class PremiereBridge {
           durationSeconds: seq.end ? seq.end.seconds : 60,
           playheadPosition: seq.getPlayerPosition ? seq.getPlayerPosition().seconds : 0,
           hasAudio: true,
-          isAvailable: true,
+          isAvailableInHost: true,
+          notes: 'Connected to active Premiere Pro 2025+ sequence.',
         };
       }
     } catch (e) {
-      // Graceful fallback when running in development browser preview
+      // Running outside Adobe UXP host (development or browser preview)
     }
 
-    // Default development fallback
+    // Development / Simulation Fallback
     return {
       name: 'Sequence 01 (1080p 30fps)',
       width: 1920,
@@ -49,26 +49,40 @@ export class PremiereBridge {
       durationSeconds: 120.0,
       playheadPosition: 0.0,
       hasAudio: true,
-      isAvailable: false, // In development mode
+      isAvailableInHost: false,
+      notes: 'Preview Mode. Connect via Adobe UXP Developer Tool inside Premiere Pro 2025+.',
     };
   }
 
   /**
-   * Verified workflow for importing exported subtitles / transparent MOV into Premiere
-   * (PRD Section 17.4 & 17.5)
+   * Guidance for Source B & C: Exporting Sequence Audio Mixdown
+   * Preserves applied effects, volume keyframes, and multi-track dialogue mixdown.
+   */
+  static getSequenceExportInstructions(): string[] {
+    return [
+      '1. In Premiere Pro, select the active sequence in the timeline (or set In/Out points for a range).',
+      '2. Press Ctrl+M (Cmd+M) or choose File > Export > Media.',
+      '3. In the Export window, select Format: "Waveform Audio" (WAV) or QuickTime (Audio Only).',
+      '4. Range: Choose "Entire Sequence" or "Source In/Out". Click Export.',
+      '5. Select or drop the exported mixdown file into CaptionLab below. This preserves all tracks and applied effects perfectly.',
+    ];
+  }
+
+  /**
+   * Guidance for importing exported graphics / subtitles back into Premiere Pro timeline
    */
   static getImportWorkflowInstructions(filePath: string, type: 'srt' | 'mov') {
     if (type === 'srt') {
       return [
-        '1. In Premiere Pro Project panel, double-click or drag-and-drop the generated .srt file.',
-        '2. Drag the imported subtitle item onto a dedicated subtitle track above your video.',
-        '3. Use the Premiere Essential Graphics panel to review or further refine captions.',
+        '1. In Premiere Pro Project bin, import the generated .srt file.',
+        '2. Drag the subtitle clip onto a dedicated Subtitle track above your video.',
+        '3. Use the Essential Graphics / Captions panel in Premiere to review and customize font styles if desired.',
       ];
     } else {
       return [
-        '1. Drag the exported ProRes 4444 MOV file directly into Premiere Pro Project bin.',
-        '2. Place the clip onto video track V2 or higher above your main footage.',
-        '3. The background will be 100% transparent with frame-accurate animated Hindi captions.',
+        '1. Drag the exported ProRes 4444 MOV clip into Premiere Pro Project bin.',
+        '2. Place it on video track V2 or higher above your main video footage.',
+        '3. The video will be 100% transparent with frame-accurate animated Hindi captions and word pop highlights.',
       ];
     }
   }

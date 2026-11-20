@@ -1,7 +1,7 @@
 /**
  * CaptionLab Shared Type Definitions
  * Version: 1.2
- * Corresponds to PRD Sections 6, 8, 9, 10, 12, 13, 20
+ * Corresponds to PRD Sections 6, 8, 9, 10, 12, 13, 20 & Phase 2/3 Decisions
  */
 
 // Property Provenance System (PRD Section 9.10)
@@ -12,9 +12,34 @@ export interface ProvenanceValue<T> {
   provenance: PropertyProvenance;
 }
 
-// Model Selection & Processing Devices (PRD Section 6.4)
+// Whisper Model Selection & Metadata (Phase 2 Decision: small is default, base is Fast Mode)
 export type WhisperModelSize = 'tiny' | 'base' | 'small' | 'medium' | 'large';
 export type ProcessingDevice = 'cpu' | 'cuda';
+export type AudioSourceType = 'direct_media' | 'sequence_audio' | 'timeline_range';
+
+export interface ModelInfo {
+  model_id: WhisperModelSize;
+  name: string;
+  size_mb: number;
+  ram_estimate_mb: number;
+  vram_estimate_mb: number;
+  is_cached: boolean;
+  is_default: boolean;
+  is_fast_mode: boolean;
+  description: string;
+}
+
+export interface AudioValidationResult {
+  file_path: string;
+  source_type: AudioSourceType;
+  is_valid: boolean;
+  format?: string;
+  duration_seconds?: number;
+  sample_rate?: number;
+  channels?: number;
+  error_message?: string;
+  extracted_cache_path?: string;
+}
 
 // Layout Families (PRD Section 10.4)
 export type LayoutFamily =
@@ -32,27 +57,26 @@ export interface Resolution {
   width: number;
   height: number;
   label?: string;
-  aspect_ratio: string; // e.g. "16:9", "9:16", "1:1", "4:5"
+  aspect_ratio: string;
 }
 
 // Normalized Screen Coordinates (0.0 - 1.0) (PRD Section 10.7)
 export interface NormalizedCoordinates {
-  x: number; // 0.0 (left) to 1.0 (right), e.g. 0.5 center
-  y: number; // 0.0 (top) to 1.0 (bottom), e.g. 0.82 bottom subtitle area
-  width: number; // 0.0 to 1.0 fraction of canvas width
-  height: number; // 0.0 to 1.0 fraction of canvas height
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 
 // Word Entity with Timestamp & Correction Status (PRD Section 6.5)
 export interface WordItem {
   word_id: string;
   text: string;
-  start: number; // in seconds
-  end: number; // in seconds
+  start: number;
+  end: number;
   confidence: number | null;
   speaker_id: string | null;
   corrected: boolean;
-  // Word-level style overrides (PRD Section 9.2 Level 3)
   custom_color?: string;
   custom_scale?: number;
   custom_highlight?: boolean;
@@ -72,9 +96,9 @@ export interface SentenceSegment {
 // Typography Configuration (PRD Section 9.5 & 11)
 export interface TypographyStyle {
   font_family: string;
-  font_weight: number | string; // 400, 700, 900
-  font_size: number; // normalized or pt
-  line_height: number; // e.g. 1.2
+  font_weight: number | string;
+  font_size: number;
+  line_height: number;
   letter_spacing: number;
   alignment: 'left' | 'center' | 'right';
   text_transform: 'none' | 'uppercase' | 'lowercase';
@@ -91,7 +115,7 @@ export interface TypographyStyle {
 export interface BackgroundStyle {
   enabled: boolean;
   color: string;
-  opacity: number; // 0.0 - 1.0
+  opacity: number;
   border_radius: number;
   padding_x: number;
   padding_y: number;
@@ -229,7 +253,7 @@ export interface CaptionItem {
   typography: TypographyStyle;
   background: BackgroundStyle;
   animation: AnimationConfig;
-  user_overridden_properties: string[]; // List of property keys customized by user
+  user_overridden_properties: string[];
 }
 
 // Caption Style Preset (PRD Section 13)
@@ -261,7 +285,7 @@ export interface CaptionLabProject {
   project: {
     id: string;
     name: string;
-    version: string; // "1.2.0"
+    version: string;
     created_at: string;
     updated_at: string;
     fps: number;
@@ -271,8 +295,8 @@ export interface CaptionLabProject {
     video_source_path?: string;
   };
   transcript: {
-    language: string; // "hindi_mixed"
-    engine: string; // "faster-whisper"
+    language: string;
+    engine: string;
     model_size: WhisperModelSize;
     sentences: SentenceSegment[];
     words: WordItem[];

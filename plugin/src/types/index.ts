@@ -2,6 +2,31 @@ export type PropertyProvenance = 'DEFAULT' | 'AUTO' | 'USER' | 'IMPORTED';
 
 export type WhisperModelSize = 'tiny' | 'base' | 'small' | 'medium' | 'large';
 export type ProcessingDevice = 'cpu' | 'cuda';
+export type AudioSourceType = 'direct_media' | 'sequence_audio' | 'timeline_range';
+
+export interface ModelInfo {
+  model_id: WhisperModelSize;
+  name: string;
+  size_mb: number;
+  ram_estimate_mb: number;
+  vram_estimate_mb: number;
+  is_cached: boolean;
+  is_default: boolean;
+  is_fast_mode: boolean;
+  description: string;
+}
+
+export interface AudioValidationResult {
+  file_path: string;
+  source_type: AudioSourceType;
+  is_valid: boolean;
+  format?: string;
+  duration_seconds?: number;
+  sample_rate?: number;
+  channels?: number;
+  error_message?: string;
+  extracted_cache_path?: string;
+}
 
 export type LayoutFamily =
   | 'single_line'

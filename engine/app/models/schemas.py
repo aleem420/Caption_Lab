@@ -1,6 +1,9 @@
 from typing import List, Optional, Dict, Any, Literal
 from pydantic import BaseModel, Field
 
+# Property Provenance System (PRD Section 9.10)
+PropertyProvenance = Literal['DEFAULT', 'AUTO', 'USER', 'IMPORTED']
+
 class WordModel(BaseModel):
     word_id: str
     text: str
@@ -91,13 +94,47 @@ class CaptionModel(BaseModel):
     animation: AnimationConfigModel = Field(default_factory=AnimationConfigModel)
     user_overridden_properties: List[str] = []
 
+# Whisper Model Metadata (PRD Section 6.4 & Phase 2 Decisions)
+WhisperModelSize = Literal["tiny", "base", "small", "medium", "large"]
+AudioSourceType = Literal["direct_media", "sequence_audio", "timeline_range"]
+
+class ModelInfo(BaseModel):
+    model_id: WhisperModelSize
+    name: str
+    size_mb: int
+    ram_estimate_mb: int
+    vram_estimate_mb: int
+    is_cached: bool
+    is_default: bool
+    is_fast_mode: bool
+    description: str
+
+class AudioValidationRequest(BaseModel):
+    file_path: str
+    source_type: AudioSourceType = "direct_media"
+
+class AudioValidationResponse(BaseModel):
+    file_path: str
+    source_type: AudioSourceType
+    is_valid: bool
+    format: Optional[str] = None
+    duration_seconds: Optional[float] = None
+    sample_rate: Optional[int] = None
+    channels: Optional[int] = None
+    error_message: Optional[str] = None
+    extracted_cache_path: Optional[str] = None
+
 class TranscribeRequest(BaseModel):
     audio_path: str
-    language: str = "hi"
-    model_size: Literal["tiny", "base", "small", "medium", "large"] = "base"
+    language: str = "hindi_mixed"
+    model_size: WhisperModelSize = "small"  # Factory-default: small (Phase 2 Decision)
     device: Literal["cpu", "cuda"] = "cpu"
+    source_type: AudioSourceType = "sequence_audio"
+    range_start: Optional[float] = None
+    range_end: Optional[float] = None
     word_timestamps: bool = True
     vad_filter: bool = True
+    vad_threshold: float = 0.5
 
 class TranscribeResponse(BaseModel):
     language: str
@@ -105,6 +142,10 @@ class TranscribeResponse(BaseModel):
     duration: float
     sentences: List[SentenceModel]
     words: List[WordModel]
+    device_used: str = "cpu"
+    cuda_fallback_occurred: bool = False
+    source_type: str = "sequence_audio"
+    warnings: List[str] = []
 
 class ExportRequest(BaseModel):
     output_type: Literal["srt", "vtt", "prores_4444", "png_sequence", "both"]

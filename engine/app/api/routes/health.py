@@ -1,22 +1,25 @@
 import shutil
 from fastapi import APIRouter
 from app.core.config import settings
+from app.services.transcription import transcription_service
 
 router = APIRouter(prefix="/health", tags=["Health"])
 
 @router.get("/")
 def get_health():
     """
-    Returns engine status, environment capabilities, and local resources.
-    Used by UXP plugin to verify engine availability.
+    Returns engine status, hardware acceleration info, and local models.
     """
     ffmpeg_available = shutil.which("ffmpeg") is not None
     
-    # Check GPU capability
+    # Check GPU capability & device name
     gpu_available = False
+    gpu_name = None
     try:
         import torch
         gpu_available = torch.cuda.is_available()
+        if gpu_available:
+            gpu_name = torch.cuda.get_device_name(0)
     except Exception:
         pass
 
@@ -26,7 +29,10 @@ def get_health():
         "version": settings.VERSION,
         "session_token": settings.SESSION_TOKEN,
         "device": "cuda" if gpu_available else "cpu",
+        "gpu_available": gpu_available,
+        "gpu_name": gpu_name or "CPU Only",
         "ffmpeg_available": ffmpeg_available,
-        "models_cached": [f.name for f in settings.MODELS_DIR.glob("*") if f.is_dir() or f.suffix in [".bin", ".pt"]],
-        "default_language": settings.DEFAULT_LANGUAGE
+        "default_model": settings.DEFAULT_WHISPER_MODEL,
+        "default_language": settings.DEFAULT_LANGUAGE,
+        "models": transcription_service.get_model_catalog()
     }

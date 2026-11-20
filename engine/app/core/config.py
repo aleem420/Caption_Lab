@@ -19,9 +19,9 @@ class Settings:
     # Session Token Security (PRD Section 19.3)
     SESSION_TOKEN: str = os.getenv("CAPTIONLAB_SESSION_TOKEN", secrets.token_urlsafe(32))
     
-    # Default model & language
-    DEFAULT_WHISPER_MODEL: str = os.getenv("CAPTIONLAB_DEFAULT_WHISPER_MODEL", "base")
-    DEFAULT_LANGUAGE: str = os.getenv("CAPTIONLAB_DEFAULT_LANGUAGE", "hi")
+    # Phase 2 Decision: Factory-default transcription model is 'small'; 'base' is Fast Mode
+    DEFAULT_WHISPER_MODEL: str = os.getenv("CAPTIONLAB_DEFAULT_WHISPER_MODEL", "small")
+    DEFAULT_LANGUAGE: str = os.getenv("CAPTIONLAB_DEFAULT_LANGUAGE", "hindi_mixed")
 
 settings = Settings()
 

@@ -1,4 +1,4 @@
-import { CaptionItem, WordItem } from '../types';
+import { CaptionItem, WordItem, ModelInfo, AudioValidationResult, AudioSourceType, WhisperModelSize } from '../types';
 
 export const ENGINE_BASE_URL = 'http://127.0.0.1:8765';
 
@@ -8,9 +8,12 @@ export interface HealthResponse {
   version: string;
   session_token: string;
   device: string;
+  gpu_available: boolean;
+  gpu_name: string;
   ffmpeg_available: boolean;
-  models_cached: string[];
+  default_model: string;
   default_language: string;
+  models: ModelInfo[];
 }
 
 export class EngineApiClient {
@@ -34,11 +37,40 @@ export class EngineApiClient {
     }
   }
 
+  static async getModels(): Promise<ModelInfo[]> {
+    const response = await fetch(`${ENGINE_BASE_URL}/transcribe/models`, {
+      headers: this.token ? { 'X-CaptionLab-Token': this.token } : {},
+    });
+    if (!response.ok) throw new Error('Failed to retrieve model catalog');
+    return response.json();
+  }
+
+  static async validateAudioSource(filePath: string, sourceType: AudioSourceType = 'direct_media'): Promise<AudioValidationResult> {
+    const response = await fetch(`${ENGINE_BASE_URL}/transcribe/validate-source`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(this.token ? { 'X-CaptionLab-Token': this.token } : {}),
+      },
+      body: JSON.stringify({
+        file_path: filePath,
+        source_type: sourceType,
+      }),
+    });
+    if (!response.ok) throw new Error('Validation request failed');
+    return response.json();
+  }
+
   static async transcribeAudio(params: {
     audio_path: string;
     language?: string;
-    model_size?: string;
+    model_size?: WhisperModelSize;
     device?: string;
+    source_type?: AudioSourceType;
+    range_start?: number;
+    range_end?: number;
+    vad_filter?: boolean;
+    vad_threshold?: number;
   }) {
     const response = await fetch(`${ENGINE_BASE_URL}/transcribe/path`, {
       method: 'POST',
@@ -49,10 +81,14 @@ export class EngineApiClient {
       body: JSON.stringify({
         audio_path: params.audio_path,
         language: params.language || 'hindi_mixed',
-        model_size: params.model_size || 'base',
+        model_size: params.model_size || 'small', // Factory Default: small
         device: params.device || 'cpu',
+        source_type: params.source_type || 'sequence_audio',
+        range_start: params.range_start,
+        range_end: params.range_end,
         word_timestamps: true,
-        vad_filter: true,
+        vad_filter: params.vad_filter ?? true,
+        vad_threshold: params.vad_threshold ?? 0.5,
       }),
     });
     if (!response.ok) {
