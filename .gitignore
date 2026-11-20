@@ -27,6 +27,8 @@ htmlcov/
 engine/models_cache/
 engine/audio_cache/
 engine/renders/
+test_media/
+test_output/
 *.tmp
 *.mov
 *.mp4

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from pathlib import Path
 from typing import Dict, Any, List
-from app.models.schemas import ExportRequest, CaptionModel
+from app.models.schemas import ExportRequest, CaptionModel, AutoGroupRequest
 from app.services.export_service import ExportService
 from app.services.caption_layout import layout_engine
 from app.core.config import settings
@@ -50,18 +50,12 @@ def export_captions(request: ExportRequest) -> Dict[str, Any]:
     }
 
 @router.post("/layout/auto-group", response_model=List[CaptionModel])
-def auto_group_captions(
-    words: list,
-    layout_family: str = "balanced_two_line",
-    fps: float = 30.0
-):
+def auto_group_captions(request: AutoGroupRequest):
     """
     Groups words into captions using reading rate, pauses, and visual balance.
     """
-    from app.models.schemas import WordModel
-    parsed_words = [WordModel(**w) for w in words]
     return layout_engine.group_words_into_captions(
-        words=parsed_words,
-        layout_family=layout_family,
-        fps=fps
+        words=request.words,
+        layout_family=request.layout_family,
+        fps=request.fps
     )

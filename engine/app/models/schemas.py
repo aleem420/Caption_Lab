@@ -155,3 +155,9 @@ class ExportRequest(BaseModel):
     filename_prefix: str = "captionlab_export"
     output_directory: Optional[str] = None
     render_background_transparency: bool = True
+
+class AutoGroupRequest(BaseModel):
+    words: List[WordModel]
+    layout_family: str = "balanced_two_line"
+    fps: float = 30.0
+
