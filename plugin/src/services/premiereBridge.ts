@@ -15,6 +15,8 @@ export interface SequenceMetadata {
   aspectRatio: string;
 }
 
+export type SequenceInfo = SequenceMetadata & { isAvailable: boolean };
+
 export interface HostStatus {
   isAvailableInHost: boolean;
   hasActiveSequence: boolean;
@@ -25,6 +27,17 @@ export interface HostStatus {
 
 export class PremiereBridge {
   private static cachedHostStatus: HostStatus | null = null;
+
+  /**
+   * Helper returning sequence info with isAvailable flag for legacy and standalone callers
+   */
+  static getSequenceInfo(): SequenceInfo | null {
+    const status = this.getHostStatus();
+    if (status.sequence) {
+      return { ...status.sequence, isAvailable: status.isAvailableInHost };
+    }
+    return null;
+  }
 
   /**
    * Introspects Adobe Premiere Pro 2025+ host environment and active sequence.

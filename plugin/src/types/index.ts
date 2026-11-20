@@ -96,22 +96,56 @@ export interface BackgroundStyle {
   border_width?: number;
 }
 
+export type EntranceAnimationType =
+  | 'none'
+  | 'fade_in'
+  | 'pop_in'
+  | 'slide_in'
+  | 'bounce_in'
+  | 'zoom_in'
+  | 'type_reveal';
+
+export type EmphasisAnimationType =
+  | 'none'
+  | 'pulse'
+  | 'shake'
+  | 'scale'
+  | 'glow'
+  | 'highlight'
+  | 'color_transition';
+
+export type ExitAnimationType =
+  | 'none'
+  | 'fade_out'
+  | 'slide_out'
+  | 'shrink'
+  | 'blur_out';
+
+export type WordAnimationType =
+  | 'none'
+  | 'word_pop'
+  | 'karaoke_highlight'
+  | 'sequential_reveal'
+  | 'active_word_highlight'
+  | 'word_scale'
+  | 'word_color_transition';
+
 export interface AnimationConfig {
   entrance: {
-    type: string;
+    type: EntranceAnimationType | string;
     duration_frames: number;
   };
   emphasis: {
-    type: string;
+    type: EmphasisAnimationType | string;
     duration_frames: number;
     repeat?: boolean;
   };
   exit: {
-    type: string;
+    type: ExitAnimationType | string;
     duration_frames: number;
   };
   word_animation: {
-    type: string;
+    type: WordAnimationType | string;
     active_color?: string;
     inactive_color?: string;
     active_scale?: number;
