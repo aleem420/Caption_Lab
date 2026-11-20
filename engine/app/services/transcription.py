@@ -117,6 +117,14 @@ class TranscriptionService:
                 is_valid=False,
                 error_message=f"File does not exist: {file_path}"
             )
+
+        if path.stat().st_size == 0:
+            return AudioValidationResponse(
+                file_path=file_path,
+                source_type=source_type,
+                is_valid=False,
+                error_message="Selected file is empty (0 bytes)."
+            )
             
         suffix = path.suffix.lower()
         if suffix not in SUPPORTED_MEDIA_EXTENSIONS:
@@ -174,6 +182,14 @@ class TranscriptionService:
                     duration = float(probe_data.get("duration", 0))
                 except Exception:
                     pass
+
+            if duration is not None and duration < 0.05:
+                return AudioValidationResponse(
+                    file_path=file_path,
+                    source_type=source_type,
+                    is_valid=False,
+                    error_message=f"Audio stream duration ({duration:.2f}s) is too short or empty."
+                )
 
             return AudioValidationResponse(
                 file_path=file_path,
@@ -282,28 +298,36 @@ class TranscriptionService:
         path = Path(audio_path)
         is_dummy = (audio_path in ["dummy.wav", "sample", "test.wav"]) or not path.exists()
 
+        # Validate timeline range parameters (Milestone 2 C)
+        if range_start is not None and range_start < 0:
+            raise ValueError(f"Invalid timeline range: range_start ({range_start}) cannot be negative.")
+        if range_start is not None and range_end is not None and range_end <= range_start:
+            raise ValueError(f"Invalid timeline range: range_end ({range_end}) must be greater than range_start ({range_start}).")
+
+        time_offset = float(range_start or 0.0)
+
         if is_dummy:
             # Deterministic simulation with specified model_size & device
             sample_words_data = [
-                ("आज", 0.20, 0.55),
-                ("हम", 0.58, 0.82),
-                ("इस", 0.85, 1.10),
-                ("project", 1.15, 1.70),
-                ("की", 1.72, 1.95),
-                ("नई", 1.98, 2.30),
-                ("technology", 2.35, 3.10),
-                ("के", 3.12, 3.30),
-                ("बारे", 3.32, 3.65),
-                ("में", 3.68, 3.85),
-                ("बात", 3.88, 4.20),
-                ("करेंगे।", 4.22, 4.75)
+                ("आज", 0.20 + time_offset, 0.55 + time_offset),
+                ("हम", 0.58 + time_offset, 0.82 + time_offset),
+                ("इस", 0.85 + time_offset, 1.10 + time_offset),
+                ("project", 1.15 + time_offset, 1.70 + time_offset),
+                ("की", 1.72 + time_offset, 1.95 + time_offset),
+                ("नई", 1.98 + time_offset, 2.30 + time_offset),
+                ("technology", 2.35 + time_offset, 3.10 + time_offset),
+                ("के", 3.12 + time_offset, 3.30 + time_offset),
+                ("बारे", 3.32 + time_offset, 3.65 + time_offset),
+                ("में", 3.68 + time_offset, 3.85 + time_offset),
+                ("बात", 3.88 + time_offset, 4.20 + time_offset),
+                ("करेंगे।", 4.22 + time_offset, 4.75 + time_offset)
             ]
             words = [
                 WordModel(
                     word_id=f"w{i+1:04d}",
                     text=text,
-                    start=start,
-                    end=end,
+                    start=round(start, 2),
+                    end=round(end, 2),
                     confidence=0.98,
                     corrected=False
                 )
@@ -311,15 +335,15 @@ class TranscriptionService:
             ]
             sentence = SentenceModel(
                 sentence_id="s001",
-                start=0.20,
-                end=4.75,
+                start=round(0.20 + time_offset, 2),
+                end=round(4.75 + time_offset, 2),
                 text="आज हम इस project की नई technology के बारे में बात करेंगे।",
                 words=words
             )
             return TranscribeResponse(
                 language=language,
                 model_size=model_size,
-                duration=5.0,
+                duration=round(5.0 + time_offset, 2),
                 sentences=[sentence],
                 words=words,
                 device_used=device,
@@ -373,8 +397,8 @@ class TranscriptionService:
                     word_item = WordModel(
                         word_id=f"w{word_count:04d}",
                         text=w.word.strip(),
-                        start=round(w.start, 2),
-                        end=round(w.end, 2),
+                        start=round(w.start + time_offset, 2),
+                        end=round(w.end + time_offset, 2),
                         confidence=round(w.probability, 2) if hasattr(w, "probability") else None,
                         corrected=False
                     )
@@ -383,8 +407,8 @@ class TranscriptionService:
 
             sentence = SentenceModel(
                 sentence_id=f"s{s_idx + 1:03d}",
-                start=round(segment.start, 2),
-                end=round(segment.end, 2),
+                start=round(segment.start + time_offset, 2),
+                end=round(segment.end + time_offset, 2),
                 text=segment.text.strip(),
                 words=seg_words
             )
@@ -393,7 +417,7 @@ class TranscriptionService:
         return TranscribeResponse(
             language=language,
             model_size=model_size,
-            duration=round(info.duration, 2),
+            duration=round(info.duration + time_offset, 2),
             sentences=sentences,
             words=all_words,
             device_used=device_used,

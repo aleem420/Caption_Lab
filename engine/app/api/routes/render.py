@@ -11,27 +11,37 @@ router = APIRouter(prefix="/render", tags=["Render & Export"])
 @router.post("/export")
 def export_captions(request: ExportRequest) -> Dict[str, Any]:
     """
-    Exports Native Subtitles (SRT, WebVTT) or Transparent ProRes 4444 MOV with Alpha (PRD Section 16).
+    Exports Native Subtitles (SRT, WebVTT), Transparent ProRes 4444 MOV with Alpha,
+    or PNG Sequence with alpha transparency (PRD Section 16 & Phase 4 Milestone 3).
     """
     output_dir = Path(request.output_directory) if request.output_directory else settings.RENDERS_DIR
     output_dir.mkdir(parents=True, exist_ok=True)
     
     results = {}
     
-    if request.output_type in ["srt", "both"]:
+    # 1. Native Subtitles (SRT)
+    if request.output_type in ["srt", "both", "all"]:
         srt_path = output_dir / f"{request.filename_prefix}.srt"
         ExportService.generate_srt(request.captions, srt_path)
         results["srt_path"] = str(srt_path.resolve())
         
-    if request.output_type in ["vtt", "both"]:
+    # 2. Native Subtitles (WebVTT)
+    if request.output_type in ["vtt", "both", "all"]:
         vtt_path = output_dir / f"{request.filename_prefix}.vtt"
         ExportService.generate_vtt(request.captions, vtt_path)
         results["vtt_path"] = str(vtt_path.resolve())
         
-    if request.output_type in ["prores_4444", "both"]:
+    # 3. Transparent Apple ProRes 4444 MOV
+    if request.output_type in ["prores_4444", "both", "all"]:
         mov_path = output_dir / f"{request.filename_prefix}_transparent.mov"
         ExportService.render_transparent_prores_mov(request, mov_path)
         results["mov_path"] = str(mov_path.resolve())
+
+    # 4. PNG Sequence (Milestone 3 C)
+    if request.output_type in ["png_sequence", "all"]:
+        png_dir = output_dir / f"{request.filename_prefix}_png_seq"
+        png_meta = ExportService.render_png_sequence(request, png_dir)
+        results["png_sequence"] = png_meta
         
     return {
         "status": "success",

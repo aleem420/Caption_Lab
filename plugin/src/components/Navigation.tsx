@@ -9,20 +9,32 @@ import {
   Settings as SettingsIcon,
   Undo2,
   Redo2,
-  Radio,
+  RefreshCw,
 } from 'lucide-react';
 import { useProjectStore, NavigationTab } from '../store/projectStore';
+import { EngineApiClient } from '../services/api';
 
 export const Navigation: React.FC = () => {
   const {
     currentTab,
     setTab,
     engineConnected,
+    setEngineConnected,
     undo,
     redo,
     historyStack,
     redoStack,
   } = useProjectStore();
+
+  const handleRetryConnection = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await EngineApiClient.checkHealth(3000);
+      setEngineConnected(true);
+    } catch {
+      setEngineConnected(false);
+    }
+  };
 
   const tabs: { id: NavigationTab; label: string; icon: React.ReactNode }[] = [
     { id: 'home', label: 'Home', icon: <Home className="w-4 h-4" /> },
@@ -50,16 +62,21 @@ export const Navigation: React.FC = () => {
           </div>
         </div>
 
-        {/* Engine status indicator */}
-        <div className="flex items-center space-x-1 pl-2 border-l border-zinc-800 text-[11px]">
+        {/* Engine status indicator with reconnect trigger */}
+        <div
+          onClick={handleRetryConnection}
+          className="flex items-center space-x-1.5 pl-2 border-l border-zinc-800 text-[11px] cursor-pointer hover:bg-zinc-800/50 px-1.5 py-0.5 rounded transition"
+          title={engineConnected ? 'Local Python Engine is online' : 'Click to retry engine connection'}
+        >
           <span
             className={`w-2 h-2 rounded-full ${
-              engineConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
+              engineConnected ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'
             }`}
           />
-          <span className="text-zinc-400 text-[10px]">
-            {engineConnected ? 'Engine Ready' : 'Connecting Engine...'}
+          <span className={`text-[10px] ${engineConnected ? 'text-zinc-400' : 'text-red-400 font-medium'}`}>
+            {engineConnected ? 'Engine Ready' : 'Engine Offline (Click to Retry)'}
           </span>
+          {!engineConnected && <RefreshCw className="w-2.5 h-2.5 text-red-400 animate-spin" />}
         </div>
       </div>
 
