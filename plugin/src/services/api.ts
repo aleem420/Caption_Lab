@@ -25,6 +25,10 @@ export class EngineApiClient {
     this.token = token;
   }
 
+  static getToken(): string {
+    return this.token;
+  }
+
   static getMaskedToken(): string {
     if (!this.token) return 'None';
     if (this.token.length <= 8) return '••••••••';

@@ -12,7 +12,7 @@ import {
   Activity,
   HardDrive,
 } from 'lucide-react';
-import { EngineApiClient, HealthResponse } from '@plugin/services/api';
+import { EngineApiClient, HealthResponse, ENGINE_BASE_URL } from '@plugin/services/api';
 import { useProjectStore } from '@plugin/store/projectStore';
 import { useSequenceStore } from '../store/sequenceStore';
 
@@ -41,7 +41,10 @@ export const StandaloneSettingsTab: React.FC = () => {
   const fetchDiagnostics = async () => {
     setIsLoadingDiag(true);
     try {
-      const res = await fetch('http://127.0.0.1:8765/health/diagnostics');
+      const token = EngineApiClient.getToken();
+      const res = await fetch(`${ENGINE_BASE_URL}/health/diagnostics`, {
+        headers: token ? { 'X-CaptionLab-Token': token } : {},
+      });
       if (res.ok) {
         const data = await res.json();
         setDiagnostics(data);

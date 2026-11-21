@@ -13,6 +13,7 @@ from tests.test_project_persistence import TestProjectPersistence
 from tests.test_milestone5_motion_engine import TestMilestone5MotionEngine
 from tests.test_milestone5_ai_intelligence import TestMilestone5AIIntelligence
 from tests.test_milestone5_design_and_presets import TestMilestone5DesignAndPresets
+from tests.test_milestone6_1_engine_hardening import TestMilestone61EngineHardening
 
 def suite():
     s = unittest.TestSuite()
@@ -24,6 +25,7 @@ def suite():
     s.addTests(loader.loadTestsFromTestCase(TestMilestone5MotionEngine))
     s.addTests(loader.loadTestsFromTestCase(TestMilestone5AIIntelligence))
     s.addTests(loader.loadTestsFromTestCase(TestMilestone5DesignAndPresets))
+    s.addTests(loader.loadTestsFromTestCase(TestMilestone61EngineHardening))
     return s
 
 if __name__ == "__main__":

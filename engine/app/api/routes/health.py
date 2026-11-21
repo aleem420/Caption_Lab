@@ -2,17 +2,19 @@ import shutil
 import platform
 import psutil
 from pathlib import Path
-from fastapi import APIRouter
+from fastapi import APIRouter, Request, Depends
 from app.core.config import settings
+from app.core.security import verify_session_token
 from app.services.transcription import transcription_service
 from app.core.errors import ERROR_CATALOG
 
 router = APIRouter(prefix="/health", tags=["Health"])
 
 @router.get("/")
-def get_health():
+def get_health(request: Request):
     """
     Returns engine status, hardware acceleration info, and local models.
+    Provides session token bootstrap exclusively to authorized loopback and local UXP clients.
     """
     ffmpeg_available = shutil.which("ffmpeg") is not None
     
@@ -27,11 +29,32 @@ def get_health():
     except Exception:
         pass
 
+    # Loopback origin security validation for bootstrap token issuance
+    origin = request.headers.get("origin", "")
+    client_host = getattr(request.client, "host", "")
+    is_loopback = client_host in ("127.0.0.1", "::1", "localhost", "testclient")
+    
+    # Block token if request originates from an untrusted web domain
+    is_trusted_origin = True
+    if origin:
+        trusted_prefixes = [
+            "http://127.0.0.1",
+            "http://localhost",
+            "https://localhost",
+            "tauri://",
+            "https://tauri.localhost",
+            "plugin://",
+            "null"
+        ]
+        is_trusted_origin = any(origin.startswith(p) for p in trusted_prefixes)
+
+    issued_token = settings.SESSION_TOKEN if (is_loopback and is_trusted_origin) else "REDACTED"
+
     return {
         "status": "healthy",
         "app_name": settings.APP_NAME,
         "version": settings.VERSION,
-        "session_token": settings.SESSION_TOKEN,
+        "session_token": issued_token,
         "device": "cuda" if gpu_available else "cpu",
         "gpu_available": gpu_available,
         "gpu_name": gpu_name or "CPU Only",
@@ -41,10 +64,11 @@ def get_health():
         "models": transcription_service.get_model_catalog()
     }
 
-@router.get("/diagnostics")
+@router.get("/diagnostics", dependencies=[Depends(verify_session_token)])
 def get_system_diagnostics():
     """
     Detailed diagnostic report for troubleshooting and production certification (Milestone 5 E).
+    Protected route requiring valid X-CaptionLab-Token header.
     Never exposes raw tokens, passwords, or private file contents.
     """
     # Calculate disk space on DATA_DIR
