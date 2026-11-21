@@ -31,15 +31,21 @@ class TypographyModel(BaseModel):
     font_size: float = 48.0
     line_height: float = 1.2
     letter_spacing: float = 0.0
+    word_spacing: float = 0.0
     alignment: Literal["left", "center", "right"] = "center"
     text_transform: Literal["none", "uppercase", "lowercase"] = "none"
     color: str = "#FFFFFF"
+    opacity: float = 1.0
+    gradient_enabled: bool = False
+    gradient_colors: List[str] = ["#FFFFFF", "#CCCCCC"]
+    gradient_direction: Literal["vertical", "horizontal"] = "vertical"
     stroke_color: Optional[str] = "#000000"
     stroke_width: Optional[float] = 4.0
     shadow_color: Optional[str] = "rgba(0,0,0,0.7)"
     shadow_blur: Optional[float] = 8.0
     shadow_offset_x: Optional[float] = 2.0
     shadow_offset_y: Optional[float] = 2.0
+    highlight_color: Optional[str] = "#FFDF00"
 
 class BackgroundModel(BaseModel):
     enabled: bool = False
@@ -50,6 +56,9 @@ class BackgroundModel(BaseModel):
     padding_y: float = 8.0
     border_color: Optional[str] = None
     border_width: Optional[float] = 0.0
+    shadow_enabled: bool = False
+    shadow_color: Optional[str] = "rgba(0,0,0,0.5)"
+    shadow_blur: Optional[float] = 10.0
 
 class NormalizedCoordinatesModel(BaseModel):
     x: float = 0.5
@@ -148,16 +157,72 @@ class TranscribeResponse(BaseModel):
     warnings: List[str] = []
 
 class ExportRequest(BaseModel):
-    output_type: Literal["srt", "vtt", "prores_4444", "png_sequence", "both"]
+    output_type: Literal["srt", "vtt", "prores_4444", "png_sequence", "mp4", "both", "all"]
     captions: List[CaptionModel]
     resolution: Dict[str, int] = Field(default_factory=lambda: {"width": 1920, "height": 1080})
     fps: float = 30.0
     filename_prefix: str = "captionlab_export"
     output_directory: Optional[str] = None
     render_background_transparency: bool = True
+    burn_in_background: Optional[str] = None # Path to video to burn into MP4
 
 class AutoGroupRequest(BaseModel):
     words: List[WordModel]
     layout_family: str = "balanced_two_line"
     fps: float = 30.0
+
+# Milestone 5 Models: Presets, Quality, Refinement
+class PresetModel(BaseModel):
+    id: str
+    name: str
+    category: Literal["style", "motion"] = "style"
+    version: str = "1.3.0"
+    preset_data: Dict[str, Any]
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+class FontInfoModel(BaseModel):
+    family: str
+    file_path: str
+    supports_devanagari: bool = True
+    is_system: bool = True
+
+class WordQualityModel(BaseModel):
+    word_id: str
+    text: str
+    is_filler: bool = False
+    is_repeated: bool = False
+    is_low_confidence: bool = False
+    confidence: Optional[float] = None
+
+class CaptionQualityModel(BaseModel):
+    caption_id: str
+    cps: float
+    wpm: float
+    reading_speed_status: Literal["optimal", "fast", "slow"] = "optimal"
+    line_balance_score: float = 1.0
+    safe_area_compliant: bool = True
+    filler_word_count: int = 0
+    warning_messages: List[str] = []
+
+class TranscriptQualityReport(BaseModel):
+    total_words: int
+    total_captions: int
+    average_cps: float
+    average_wpm: float
+    quality_score: float
+    filler_words_found: List[str] = []
+    repeated_words_found: List[str] = []
+    low_confidence_count: int = 0
+    caption_reports: List[CaptionQualityModel] = []
+
+class QualityAnalysisRequest(BaseModel):
+    captions: List[CaptionModel]
+    aspect_ratio: str = "16:9"
+
+class RefineTranscriptRequest(BaseModel):
+    words: List[WordModel]
+    remove_fillers: bool = False
+    remove_repetitions: bool = False
+
 

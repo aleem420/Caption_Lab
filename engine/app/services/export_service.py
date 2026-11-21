@@ -7,6 +7,8 @@ import tempfile
 from PIL import Image, ImageDraw, ImageFont
 from app.models.schemas import CaptionModel, WordModel, ExportRequest
 from app.core.config import settings
+from app.services.font_service import font_service
+from app.services.animation_engine import animation_engine
 
 def format_srt_timestamp(seconds: float) -> str:
     """Format seconds into SRT timestamp HH:MM:SS,mmm"""
@@ -84,39 +86,25 @@ class ExportService:
         total_duration = max(c.end_time for c in request.captions)
         total_frames = int(math.ceil(total_duration * fps))
 
-        # Font caching with Mangal as primary Devanagari font and robust fallback
+        # Font caching with FontService and robust fallbacks
         font_cache = {}
-        font_candidates = [
-            "C:/Windows/Fonts/mangal.ttf",
-            "C:/Windows/Fonts/Nirmala.ttf",
-            "C:/Windows/Fonts/arial.ttf",
-            "mangal.ttf",
-            "Nirmala.ttf",
-            "arial.ttf"
-        ]
         
-        def get_font(size: int):
-            if size in font_cache:
-                return font_cache[size]
-            f = None
-            for candidate in font_candidates:
-                try:
-                    f = ImageFont.truetype(candidate, size=size)
-                    break
-                except Exception:
-                    continue
-            if f is None:
-                f = ImageFont.load_default()
-            font_cache[size] = f
+        def get_font(family: str, size: int):
+            cache_key = f"{family}_{size}"
+            if cache_key in font_cache:
+                return font_cache[cache_key]
+            f = font_service.load_font(family, size)
+            font_cache[cache_key] = f
             return f
 
         # Pre-layout stable positions for each caption
         # Pre-computing word centers ensures inactive words remain stationary
-        # and reserves space for the maximum 1.15x scale without collision
+        # and reserves space for the maximum scale without collision
         caption_layouts = {}
         for cap in request.captions:
             cap_font_size = int(round(cap.typography.font_size)) if (cap.typography and cap.typography.font_size) else int(height * 0.045)
-            base_font = get_font(cap_font_size)
+            cap_font_family = cap.typography.font_family if cap.typography else "Noto Sans Devanagari"
+            base_font = get_font(cap_font_family, cap_font_size)
             try:
                 ascent, descent = base_font.getmetrics()
             except Exception:
@@ -235,33 +223,29 @@ class ExportService:
                     orig_bbox = m["bbox"]
                     center_x = word_centers[i]
                     
-                    # Strict half-open word interval
-                    is_active_word = (w.start <= current_time < w.end)
+                    # Strict half-open word interval & animation transform via AnimationEngine
+                    w_trans = animation_engine.get_word_transform(
+                        word=w,
+                        current_time=current_time,
+                        word_anim_config=active_cap.animation.word_animation if active_cap.animation else None,
+                        default_color=active_cap.typography.color if active_cap.typography else "#FFFFFF"
+                    )
+                    is_active_word = w_trans["is_active"]
+                    word_scale = w_trans["scale"]
+                    word_offset_y = w_trans.get("offset_y", 0.0)
+                    word_opacity = w_trans.get("opacity", 1.0)
                     
-                    if is_active_word:
-                        # Active color: Golden Yellow (#FFDF00)
-                        text_color = (255, 223, 0, 255)
+                    if word_opacity <= 0.0:
+                        continue
                         
-                        # Smooth scale interpolation (attack/decay curve up to max_scale)
-                        w_dur = max(0.01, w.end - w.start)
-                        attack_dur = min(0.08, w_dur / 3.0)
-                        decay_dur = min(0.08, w_dur / 3.0)
-                        t_rel = current_time - w.start
-                        t_rem = w.end - current_time
-                        
-                        if t_rel < attack_dur:
-                            p = t_rel / attack_dur
-                            ease_p = 1.0 - (1.0 - p) * (1.0 - p)
-                            word_scale = 1.0 + (max_scale - 1.0) * ease_p
-                        elif t_rem < decay_dur:
-                            p = t_rem / decay_dur
-                            ease_p = 1.0 - (1.0 - p) * (1.0 - p)
-                            word_scale = 1.0 + (max_scale - 1.0) * ease_p
-                        else:
-                            word_scale = max_scale
+                    c_hex = w_trans["color"]
+                    if c_hex and c_hex.startswith("#") and len(c_hex) == 7:
+                        r = int(c_hex[1:3], 16)
+                        g = int(c_hex[3:5], 16)
+                        b = int(c_hex[5:7], 16)
+                        text_color = (r, g, b, int(round(255 * word_opacity)))
                     else:
-                        text_color = (255, 255, 255, 255)
-                        word_scale = 1.0
+                        text_color = (255, 223, 0, 255) if is_active_word else (255, 255, 255, 255)
                         
                     # Render atomic word cluster to scratch buffer
                     pad = 12
@@ -296,25 +280,19 @@ class ExportService:
                         
                     # Baseline locking & stable center alignment
                     paste_x = int(round(center_x - (scaled_buf.width / 2.0)))
-                    paste_y = int(round(target_baseline_y - scaled_baseline))
+                    paste_y = int(round(target_baseline_y - scaled_baseline + word_offset_y))
                     
                     # Step 3: Compose word onto caption layer
                     cap_layer.alpha_composite(scaled_buf, (paste_x, paste_y))
                 
-                # Transformation Step 4: Caption-level entrance transformation
-                ent_cfg = active_cap.animation.entrance if active_cap.animation else {"type": "pop_in", "duration_frames": 4}
-                ent_frames = int(ent_cfg.get("duration_frames", 4))
-                ent_dur = ent_frames / fps
-                rel_time = current_time - active_cap.start_time
-                
-                if rel_time < ent_dur and ent_frames > 0:
-                    p_ent = max(0.0, min(1.0, rel_time / ent_dur))
-                    # Cubic Ease-Out: f(p) = 1 - (1 - p)^3
-                    ease_ent = 1.0 - (1.0 - p_ent) ** 3
-                    # Scale from 0.80x to 1.0x
-                    cap_scale = 0.80 + 0.20 * ease_ent
-                    
-                    # Scale cap_layer around (pos_x, pos_y)
+                # Transformation Step 4 & 5: Caption-level entrance & exit via AnimationEngine
+                cap_trans = animation_engine.get_caption_transform(active_cap, current_time, fps)
+                cap_scale = cap_trans["scale_x"]
+                cap_opacity = cap_trans["opacity"]
+                cap_off_x = cap_trans["offset_x"]
+                cap_off_y = cap_trans["offset_y"]
+
+                if abs(cap_scale - 1.0) > 1e-3 or abs(cap_off_x) > 1e-3 or abs(cap_off_y) > 1e-3:
                     bbox_content = cap_layer.getbbox()
                     if bbox_content:
                         cw = bbox_content[2] - bbox_content[0]
@@ -325,22 +303,13 @@ class ExportService:
                         scaled_crop = crop.resize((scaled_cw, scaled_ch), Image.Resampling.LANCZOS)
                         
                         cap_layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-                        new_paste_x = int(round(pos_x - (scaled_cw / 2.0)))
-                        new_paste_y = int(round(pos_y - (scaled_ch / 2.0)))
+                        new_paste_x = int(round(pos_x + cap_off_x - (scaled_cw / 2.0)))
+                        new_paste_y = int(round(pos_y + cap_off_y - (scaled_ch / 2.0)))
                         cap_layer.alpha_composite(scaled_crop, (new_paste_x, new_paste_y))
-                
-                # Transformation Step 5: Caption-level exit opacity fade
-                exit_cfg = active_cap.animation.exit if active_cap.animation else {"type": "fade_out", "duration_frames": 4}
-                exit_frames = int(exit_cfg.get("duration_frames", 4))
-                exit_dur = exit_frames / fps
-                time_to_end = active_cap.end_time - current_time
-                
-                if time_to_end < exit_dur and exit_frames > 0:
-                    p_exit = max(0.0, min(1.0, time_to_end / exit_dur))
-                    opacity = p_exit
-                    
+
+                if cap_opacity < 0.999:
                     r, g, b, a = cap_layer.split()
-                    a = a.point(lambda v: int(round(v * opacity)))
+                    a = a.point(lambda v: int(round(v * cap_opacity)))
                     cap_layer = Image.merge("RGBA", (r, g, b, a))
                 
                 # Transformation Step 6: Composite the final RGBA frame
@@ -437,3 +406,71 @@ class ExportService:
             "duration_seconds": total_frames / fps,
             "fps": fps
         }
+
+    @staticmethod
+    def render_burned_mp4(
+        request: ExportRequest,
+        output_path: Path,
+        progress_callback = None
+    ) -> Path:
+        """
+        Renders H.264 MP4 video with burned-in captions (Milestone 5).
+        If burn_in_background is provided, overlays on the source video.
+        Otherwise renders over a clean dark video background.
+        """
+        fps = request.fps or 30.0
+        width = request.resolution.get("width", 1920)
+        height = request.resolution.get("height", 1080)
+        temp_dir = Path(tempfile.mkdtemp(prefix="captionlab_render_mp4_"))
+        try:
+            total_frames = ExportService._render_frames(request, temp_dir, progress_callback)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            input_pattern = str(temp_dir / "frame_%06d.png")
+            
+            target_path = output_path
+            counter = 1
+            while target_path.exists():
+                try:
+                    with open(target_path, "ab"):
+                        break
+                except PermissionError:
+                    suffix = output_path.suffix
+                    stem = output_path.stem
+                    target_path = output_path.with_name(f"{stem}_updated_{counter}{suffix}")
+                    counter += 1
+
+            if request.burn_in_background and Path(request.burn_in_background).exists():
+                ffmpeg_cmd = [
+                    "ffmpeg",
+                    "-y",
+                    "-i", str(request.burn_in_background),
+                    "-framerate", str(fps),
+                    "-i", input_pattern,
+                    "-filter_complex", "[0:v][1:v]overlay=0:0:shortest=1",
+                    "-c:v", "libx264",
+                    "-pix_fmt", "yuv420p",
+                    "-c:a", "copy",
+                    str(target_path)
+                ]
+            else:
+                duration_sec = total_frames / fps
+                ffmpeg_cmd = [
+                    "ffmpeg",
+                    "-y",
+                    "-f", "lavfi",
+                    "-i", f"color=c=0x09090b:s={width}x{height}:r={fps}:d={duration_sec}",
+                    "-framerate", str(fps),
+                    "-i", input_pattern,
+                    "-filter_complex", "[0:v][1:v]overlay=0:0:shortest=1",
+                    "-c:v", "libx264",
+                    "-pix_fmt", "yuv420p",
+                    str(target_path)
+                ]
+
+            res = subprocess.run(ffmpeg_cmd, capture_output=True, text=True)
+            if res.returncode != 0:
+                raise RuntimeError(f"FFmpeg MP4 burn-in encoding failed: {res.stderr}")
+
+            return target_path
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)

@@ -39,6 +39,27 @@ class DatabaseService:
                     value_json TEXT NOT NULL
                 )
             """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS custom_presets (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    category TEXT NOT NULL DEFAULT 'style',
+                    version TEXT NOT NULL DEFAULT '1.3.0',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    preset_json TEXT NOT NULL
+                )
+            """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS font_catalog (
+                    family TEXT PRIMARY KEY,
+                    postscript_name TEXT,
+                    file_path TEXT NOT NULL,
+                    supports_devanagari BOOLEAN DEFAULT 1,
+                    is_custom BOOLEAN DEFAULT 0,
+                    installed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
             conn.commit()
 
     async def init_db(self):
@@ -104,5 +125,112 @@ class DatabaseService:
 
     async def list_recent_projects(self, limit: int = 10) -> List[Dict[str, Any]]:
         return await asyncio.to_thread(self._sync_list_recent_projects, limit)
+
+    def _sync_save_preset(self, preset_id: str, name: str, category: str, version: str, data: Dict[str, Any]):
+        preset_str = json.dumps(data)
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO custom_presets (id, name, category, version, updated_at, preset_json)
+                VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    name = excluded.name,
+                    category = excluded.category,
+                    version = excluded.version,
+                    updated_at = CURRENT_TIMESTAMP,
+                    preset_json = excluded.preset_json
+            """, (preset_id, name, category, version, preset_str))
+            conn.commit()
+
+    async def save_preset(self, preset_id: str, name: str, category: str, version: str, data: Dict[str, Any]):
+        await asyncio.to_thread(self._sync_save_preset, preset_id, name, category, version, data)
+
+    def _sync_get_preset(self, preset_id: str) -> Optional[Dict[str, Any]]:
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id, name, category, version, created_at, updated_at, preset_json FROM custom_presets WHERE id = ?", (preset_id,))
+            row = cursor.fetchone()
+            if row:
+                return {
+                    "id": row[0],
+                    "name": row[1],
+                    "category": row[2],
+                    "version": row[3],
+                    "created_at": row[4],
+                    "updated_at": row[5],
+                    "preset_data": json.loads(row[6])
+                }
+            return None
+
+    async def get_preset(self, preset_id: str) -> Optional[Dict[str, Any]]:
+        return await asyncio.to_thread(self._sync_get_preset, preset_id)
+
+    def _sync_list_presets(self, category: Optional[str] = None) -> List[Dict[str, Any]]:
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            if category:
+                cursor.execute("SELECT id, name, category, version, created_at, updated_at, preset_json FROM custom_presets WHERE category = ? ORDER BY updated_at DESC", (category,))
+            else:
+                cursor.execute("SELECT id, name, category, version, created_at, updated_at, preset_json FROM custom_presets ORDER BY updated_at DESC")
+            rows = cursor.fetchall()
+            return [
+                {
+                    "id": r[0],
+                    "name": r[1],
+                    "category": r[2],
+                    "version": r[3],
+                    "created_at": r[4],
+                    "updated_at": r[5],
+                    "preset_data": json.loads(r[6])
+                }
+                for r in rows
+            ]
+
+    async def list_presets(self, category: Optional[str] = None) -> List[Dict[str, Any]]:
+        return await asyncio.to_thread(self._sync_list_presets, category)
+
+    def _sync_delete_preset(self, preset_id: str) -> bool:
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM custom_presets WHERE id = ?", (preset_id,))
+            conn.commit()
+            return cursor.rowcount > 0
+
+    async def delete_preset(self, preset_id: str) -> bool:
+        return await asyncio.to_thread(self._sync_delete_preset, preset_id)
+
+    def _sync_save_font(self, family: str, file_path: str, supports_devanagari: bool = True, is_custom: bool = False):
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO font_catalog (family, file_path, supports_devanagari, is_custom)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(family) DO UPDATE SET
+                    file_path = excluded.file_path,
+                    supports_devanagari = excluded.supports_devanagari,
+                    is_custom = excluded.is_custom
+            """, (family, file_path, 1 if supports_devanagari else 0, 1 if is_custom else 0))
+            conn.commit()
+
+    async def save_font(self, family: str, file_path: str, supports_devanagari: bool = True, is_custom: bool = False):
+        await asyncio.to_thread(self._sync_save_font, family, file_path, supports_devanagari, is_custom)
+
+    def _sync_list_fonts(self) -> List[Dict[str, Any]]:
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT family, file_path, supports_devanagari, is_custom FROM font_catalog ORDER BY family ASC")
+            rows = cursor.fetchall()
+            return [
+                {
+                    "family": r[0],
+                    "file_path": r[1],
+                    "supports_devanagari": bool(r[2]),
+                    "is_custom": bool(r[3])
+                }
+                for r in rows
+            ]
+
+    async def list_fonts(self) -> List[Dict[str, Any]]:
+        return await asyncio.to_thread(self._sync_list_fonts)
 
 db_service = DatabaseService()

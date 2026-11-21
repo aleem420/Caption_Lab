@@ -17,7 +17,7 @@ import { PremiereBridge } from '../../services/premiereBridge';
 
 export const ExportTab: React.FC = () => {
   const { project } = useProjectStore();
-  const [outputType, setOutputType] = useState<'both' | 'prores_4444' | 'srt' | 'png_sequence'>('both');
+  const [outputType, setOutputType] = useState<'both' | 'prores_4444' | 'srt' | 'png_sequence' | 'mp4'>('both');
   const [resolution, setResolution] = useState<{ width: number; height: number }>({
     width: project.project.width || 1920,
     height: project.project.height || 1080,
@@ -71,7 +71,7 @@ export const ExportTab: React.FC = () => {
       </div>
 
       {/* Output Format Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
+      <div className="grid grid-cols-1 sm:grid-cols-5 gap-2.5">
         {[
           {
             id: 'both',
@@ -93,6 +93,13 @@ export const ExportTab: React.FC = () => {
             badge: 'RGBA 32-bit',
             desc: 'Transparent image sequence (frame_000000.png) with missing-frame detection.',
             icon: <Layers className="w-4 h-4 text-purple-400" />,
+          },
+          {
+            id: 'mp4',
+            title: 'Burned-in MP4',
+            badge: 'H.264 Video',
+            desc: 'Self-contained video with burned-in animated captions for social sharing.',
+            icon: <Film className="w-4 h-4 text-rose-400" />,
           },
           {
             id: 'srt',

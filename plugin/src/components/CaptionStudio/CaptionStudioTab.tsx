@@ -31,10 +31,23 @@ export const CaptionStudioTab: React.FC = () => {
     updateCaptionCoordinates,
     applyPresetToCaption,
     applyPresetToAllCaptions,
+    availableFonts,
+    fetchFonts,
+    customPresets,
+    fetchPresets,
+    saveCustomPreset,
+    stepFrame,
   } = useProjectStore();
 
-  const [aspectRatio, setAspectRatio] = useState<'16:9' | '9:16' | '1:1'>('16:9');
+  const [aspectRatio, setAspectRatio] = useState<'16:9' | '9:16' | '1:1' | '4:5'>('16:9');
   const [showSafeAreas, setShowSafeAreas] = useState(true);
+  const [newPresetName, setNewPresetName] = useState('');
+  const [isSavingPreset, setIsSavingPreset] = useState(false);
+
+  useEffect(() => {
+    fetchFonts();
+    fetchPresets();
+  }, [fetchFonts, fetchPresets]);
 
   // Animation playback loop
   useEffect(() => {
@@ -117,7 +130,7 @@ export const CaptionStudioTab: React.FC = () => {
         <div className="bg-zinc-900 border-b border-zinc-800 px-4 py-2 flex items-center justify-between text-xs">
           <div className="flex items-center space-x-2">
             <span className="text-zinc-400 font-medium">Aspect Ratio:</span>
-            {(['16:9', '9:16', '1:1'] as const).map((ratio) => (
+            {(['16:9', '9:16', '1:1', '4:5'] as const).map((ratio) => (
               <button
                 key={ratio}
                 onClick={() => setAspectRatio(ratio)}
@@ -132,8 +145,22 @@ export const CaptionStudioTab: React.FC = () => {
             ))}
           </div>
 
-          <div className="flex items-center space-x-3">
-            <label className="flex items-center space-x-1.5 cursor-pointer text-zinc-400 hover:text-zinc-200">
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => stepFrame(-1)}
+              title="Step -1 Frame"
+              className="px-2 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded text-xs font-mono"
+            >
+              -1F
+            </button>
+            <button
+              onClick={() => stepFrame(1)}
+              title="Step +1 Frame"
+              className="px-2 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded text-xs font-mono"
+            >
+              +1F
+            </button>
+            <label className="flex items-center space-x-1.5 cursor-pointer text-zinc-400 hover:text-zinc-200 ml-2">
               <input
                 type="checkbox"
                 checked={showSafeAreas}
@@ -391,6 +418,11 @@ export const CaptionStudioTab: React.FC = () => {
                 <option value="Mukta">Mukta (Bold / Dynamic)</option>
                 <option value="Hind">Hind (Balanced Body)</option>
                 <option value="Noto Serif Devanagari">Noto Serif Devanagari (Cinematic)</option>
+                {availableFonts.map((f) => (
+                  <option key={f.family} value={f.family}>
+                    {f.family} {f.supports_devanagari ? '(Devanagari)' : ''}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -430,6 +462,68 @@ export const CaptionStudioTab: React.FC = () => {
               </div>
             </div>
 
+            {/* Letter Spacing & Line Height */}
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <span className="text-[10px] text-zinc-400 block mb-1">
+                  Letter Spacing ({activeCaption.typography.letter_spacing || 0}px)
+                </span>
+                <input
+                  type="range"
+                  min="-2"
+                  max="8"
+                  step="0.5"
+                  value={activeCaption.typography.letter_spacing || 0}
+                  onChange={(e) =>
+                    updateCaptionTypography(activeCaption.caption_id, {
+                      letter_spacing: parseFloat(e.target.value),
+                    })
+                  }
+                  className="w-full accent-blue-600"
+                />
+              </div>
+              <div>
+                <span className="text-[10px] text-zinc-400 block mb-1">
+                  Line Height ({activeCaption.typography.line_height || 1.2})
+                </span>
+                <input
+                  type="range"
+                  min="1.0"
+                  max="1.8"
+                  step="0.05"
+                  value={activeCaption.typography.line_height || 1.2}
+                  onChange={(e) =>
+                    updateCaptionTypography(activeCaption.caption_id, {
+                      line_height: parseFloat(e.target.value),
+                    })
+                  }
+                  className="w-full accent-blue-600"
+                />
+              </div>
+            </div>
+
+            {/* Text Alignment */}
+            <div>
+              <span className="text-[10px] text-zinc-400 block mb-1">Text Alignment</span>
+              <div className="grid grid-cols-3 gap-1">
+                {(['left', 'center', 'right'] as const).map((align) => (
+                  <button
+                    key={align}
+                    onClick={() =>
+                      updateCaptionTypography(activeCaption.caption_id, { alignment: align })
+                    }
+                    className={`py-1 text-[11px] rounded capitalize border transition ${
+                      activeCaption.typography.alignment === align
+                        ? 'bg-blue-600 text-white border-blue-500 font-semibold'
+                        : 'bg-zinc-950 text-zinc-400 border-zinc-800 hover:text-zinc-200'
+                    }`}
+                  >
+                    {align}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* Text Color & Stroke */}
             <div className="grid grid-cols-2 gap-2">
               <div>
@@ -457,6 +551,150 @@ export const CaptionStudioTab: React.FC = () => {
             </div>
           </div>
         )}
+
+        {/* Background Box Inspector */}
+        {activeCaption && (
+          <div className="space-y-3 pt-3 border-t border-zinc-800">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-zinc-200 flex items-center space-x-1.5">
+                <Square className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Background Box</span>
+              </label>
+              <label className="flex items-center space-x-1.5 cursor-pointer text-zinc-400 text-xs">
+                <input
+                  type="checkbox"
+                  checked={activeCaption.background.enabled}
+                  onChange={(e) =>
+                    updateCaptionBackground(activeCaption.caption_id, { enabled: e.target.checked })
+                  }
+                  className="rounded border-zinc-700 text-blue-600"
+                />
+                <span>Enabled</span>
+              </label>
+            </div>
+
+            {activeCaption.background.enabled && (
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <span className="text-[10px] text-zinc-400 block mb-1">Color</span>
+                    <input
+                      type="color"
+                      value={activeCaption.background.color}
+                      onChange={(e) =>
+                        updateCaptionBackground(activeCaption.caption_id, { color: e.target.value })
+                      }
+                      className="w-full h-7 bg-zinc-950 rounded cursor-pointer border border-zinc-800"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-zinc-400 block mb-1">
+                      Opacity ({Math.round(activeCaption.background.opacity * 100)}%)
+                    </span>
+                    <input
+                      type="range"
+                      min="0.1"
+                      max="1.0"
+                      step="0.05"
+                      value={activeCaption.background.opacity}
+                      onChange={(e) =>
+                        updateCaptionBackground(activeCaption.caption_id, {
+                          opacity: parseFloat(e.target.value),
+                        })
+                      }
+                      className="w-full accent-blue-600"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <span className="text-[10px] text-zinc-400 block mb-1">
+                      Radius ({activeCaption.background.border_radius}px)
+                    </span>
+                    <input
+                      type="range"
+                      min="0"
+                      max="24"
+                      value={activeCaption.background.border_radius}
+                      onChange={(e) =>
+                        updateCaptionBackground(activeCaption.caption_id, {
+                          border_radius: parseInt(e.target.value),
+                        })
+                      }
+                      className="w-full accent-blue-600"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-zinc-400 block mb-1">
+                      Padding X ({activeCaption.background.padding_x}px)
+                    </span>
+                    <input
+                      type="range"
+                      min="4"
+                      max="48"
+                      value={activeCaption.background.padding_x}
+                      onChange={(e) =>
+                        updateCaptionBackground(activeCaption.caption_id, {
+                          padding_x: parseInt(e.target.value),
+                        })
+                      }
+                      className="w-full accent-blue-600"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Custom Presets Library (Milestone 5) */}
+        <div className="space-y-2 pt-3 border-t border-zinc-800">
+          <label className="text-xs font-semibold text-zinc-200 flex items-center space-x-1.5">
+            <Sliders className="w-3.5 h-3.5 text-purple-400" />
+            <span>Save Custom Preset</span>
+          </label>
+          <div className="flex space-x-1.5">
+            <input
+              type="text"
+              placeholder="Preset Name..."
+              value={newPresetName}
+              onChange={(e) => setNewPresetName(e.target.value)}
+              className="flex-1 bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-zinc-200 text-xs"
+            />
+            <button
+              onClick={async () => {
+                if (newPresetName.trim()) {
+                  setIsSavingPreset(true);
+                  await saveCustomPreset(newPresetName.trim(), 'style');
+                  setNewPresetName('');
+                  setIsSavingPreset(false);
+                }
+              }}
+              disabled={!newPresetName.trim() || isSavingPreset}
+              className="px-2.5 py-1 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white rounded text-xs font-semibold transition"
+            >
+              Save
+            </button>
+          </div>
+
+          {customPresets.length > 0 && (
+            <div className="space-y-1 mt-2">
+              <span className="text-[10px] text-zinc-500 uppercase font-semibold">User Presets:</span>
+              <div className="grid grid-cols-2 gap-1.5">
+                {customPresets.map((cp) => (
+                  <button
+                    key={cp.id}
+                    onClick={() => activeCaption && applyPresetToCaption(activeCaption.caption_id, cp.id)}
+                    className="p-1.5 bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 rounded text-left transition text-[11px] truncate text-purple-300"
+                  >
+                    {cp.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* Position Controls (Normalized Coordinates) */}
         {activeCaption && (

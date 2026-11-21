@@ -109,15 +109,21 @@ export interface TypographyStyle {
   font_size: number;
   line_height: number;
   letter_spacing: number;
+  word_spacing?: number;
   alignment: 'left' | 'center' | 'right';
   text_transform: 'none' | 'uppercase' | 'lowercase';
   color: string;
+  opacity?: number;
+  gradient_enabled?: boolean;
+  gradient_colors?: string[];
+  gradient_direction?: 'vertical' | 'horizontal';
   stroke_color?: string;
   stroke_width?: number;
   shadow_color?: string;
   shadow_blur?: number;
   shadow_offset_x?: number;
   shadow_offset_y?: number;
+  highlight_color?: string;
 }
 
 // Background Box Style (PRD Section 9.6)
@@ -130,6 +136,9 @@ export interface BackgroundStyle {
   padding_y: number;
   border_color?: string;
   border_width?: number;
+  shadow_enabled?: boolean;
+  shadow_color?: string;
+  shadow_blur?: number;
 }
 
 // Animation Definitions (PRD Section 12)
@@ -315,4 +324,88 @@ export interface CaptionLabProject {
   captions: CaptionItem[];
   presets: StylePreset[];
   export_settings?: ExportConfig;
+}
+
+// Milestone 5 Presets, Fonts & Motion
+export type MotionPresetType =
+  | 'word_pop'
+  | 'smooth_fade'
+  | 'slide_up'
+  | 'slide_down'
+  | 'type_reveal'
+  | 'karaoke_highlight'
+  | 'scale_bounce'
+  | 'cinematic_reveal'
+  | 'staggered_words'
+  | 'character_reveal';
+
+export interface MotionPreset {
+  id: string;
+  name: string;
+  type: MotionPresetType;
+  animation_target: 'caption' | 'line' | 'word' | 'character';
+  easing: 'linear' | 'ease_in' | 'ease_out' | 'ease_in_out' | 'cubic' | 'bounce';
+  duration_frames: number;
+  config: {
+    start_scale?: number;
+    end_scale?: number;
+    start_opacity?: number;
+    end_opacity?: number;
+    offset_y?: number;
+    offset_x?: number;
+    active_color?: string;
+    inactive_color?: string;
+    active_scale?: number;
+    bounce_height?: number;
+    stagger_frames?: number;
+  };
+}
+
+export interface CustomPreset {
+  id: string;
+  name: string;
+  category: 'style' | 'motion';
+  version: string;
+  created_at?: string;
+  updated_at?: string;
+  preset_data: StylePreset | MotionPreset;
+}
+
+export interface FontInfo {
+  family: string;
+  file_path: string;
+  supports_devanagari: boolean;
+  is_system: boolean;
+}
+
+export interface WordQuality {
+  word_id: string;
+  text: string;
+  is_filler: boolean;
+  is_repeated: boolean;
+  is_low_confidence: boolean;
+  confidence?: number;
+}
+
+export interface CaptionQuality {
+  caption_id: string;
+  cps: number;
+  wpm: number;
+  reading_speed_status: 'optimal' | 'fast' | 'slow';
+  line_balance_score: number;
+  safe_area_compliant: boolean;
+  filler_word_count: number;
+  warning_messages: string[];
+}
+
+export interface TranscriptQualityReport {
+  total_words: number;
+  total_captions: number;
+  average_cps: number;
+  average_wpm: number;
+  quality_score: number;
+  filler_words_found: string[];
+  repeated_words_found: string[];
+  low_confidence_count: number;
+  caption_reports: CaptionQuality[];
 }

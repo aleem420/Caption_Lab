@@ -10,6 +10,9 @@ from tests.run_tests import TestCaptionLabPhase2Phase3
 from tests.test_visual_qa import TestVisualAndAnimationQA
 from tests.test_stress_and_benchmarks import TestStressAndProductionBenchmarks
 from tests.test_project_persistence import TestProjectPersistence
+from tests.test_milestone5_motion_engine import TestMilestone5MotionEngine
+from tests.test_milestone5_ai_intelligence import TestMilestone5AIIntelligence
+from tests.test_milestone5_design_and_presets import TestMilestone5DesignAndPresets
 
 def suite():
     s = unittest.TestSuite()
@@ -18,6 +21,9 @@ def suite():
     s.addTests(loader.loadTestsFromTestCase(TestVisualAndAnimationQA))
     s.addTests(loader.loadTestsFromTestCase(TestStressAndProductionBenchmarks))
     s.addTests(loader.loadTestsFromTestCase(TestProjectPersistence))
+    s.addTests(loader.loadTestsFromTestCase(TestMilestone5MotionEngine))
+    s.addTests(loader.loadTestsFromTestCase(TestMilestone5AIIntelligence))
+    s.addTests(loader.loadTestsFromTestCase(TestMilestone5DesignAndPresets))
     return s
 
 if __name__ == "__main__":

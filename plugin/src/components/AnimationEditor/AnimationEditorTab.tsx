@@ -125,7 +125,7 @@ export const AnimationEditorTab: React.FC = () => {
                       word_animation: {
                         ...activeCaption.animation.word_animation,
                         type: anim.id,
-                        active_scale: anim.id === 'word_pop' ? 1.15 : 1.1,
+                        active_scale: anim.id === 'word_pop' ? 1.25 : 1.15,
                       },
                     });
                   }
@@ -141,6 +141,74 @@ export const AnimationEditorTab: React.FC = () => {
               </div>
             );
           })}
+        </div>
+
+        {/* Geometric Scale Slider (Milestone 5) */}
+        {activeCaption && (
+          <div className="pt-2 border-t border-zinc-800 flex items-center justify-between">
+            <span className="text-[11px] text-zinc-400">
+              Active Word Geometric Scale ({activeCaption.animation.word_animation.active_scale || 1.15}×)
+            </span>
+            <input
+              type="range"
+              min="1.05"
+              max="1.35"
+              step="0.01"
+              value={activeCaption.animation.word_animation.active_scale || 1.15}
+              onChange={(e) =>
+                updateCaptionAnimation(activeCaption.caption_id, {
+                  word_animation: {
+                    ...activeCaption.animation.word_animation,
+                    active_scale: parseFloat(e.target.value),
+                  },
+                })
+              }
+              className="w-48 accent-amber-500"
+            />
+          </div>
+        )}
+      </div>
+
+      {/* 10 Professional Motion Presets (Milestone 5) */}
+      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 space-y-3">
+        <label className="text-xs font-semibold text-zinc-200 flex items-center space-x-1.5">
+          <Film className="w-3.5 h-3.5 text-blue-400" />
+          <span>Professional Motion Presets (10 Preset Library)</span>
+        </label>
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+          {[
+            { id: 'mot_word_pop', name: 'Word Pop', type: 'word_pop', scale: 1.25, ent: 'pop_in', ex: 'shrink' },
+            { id: 'mot_smooth_fade', name: 'Smooth Fade', type: 'karaoke_highlight', scale: 1.05, ent: 'fade_in', ex: 'fade_out' },
+            { id: 'mot_slide_up', name: 'Slide Up', type: 'word_pop', scale: 1.15, ent: 'slide_in', ex: 'slide_out' },
+            { id: 'mot_slide_down', name: 'Slide Down', type: 'karaoke_highlight', scale: 1.1, ent: 'slide_in', ex: 'fade_out' },
+            { id: 'mot_type_reveal', name: 'Type Reveal', type: 'sequential_reveal', scale: 1.05, ent: 'type_reveal', ex: 'fade_out' },
+            { id: 'mot_karaoke', name: 'Karaoke Pro', type: 'karaoke_highlight', scale: 1.15, ent: 'fade_in', ex: 'fade_out' },
+            { id: 'mot_scale_bounce', name: 'Scale Bounce', type: 'word_pop', scale: 1.30, ent: 'pop_in', ex: 'shrink' },
+            { id: 'mot_cinematic', name: 'Cinematic', type: 'active_word_highlight', scale: 1.08, ent: 'fade_in', ex: 'fade_out' },
+            { id: 'mot_staggered', name: 'Staggered', type: 'word_pop', scale: 1.18, ent: 'pop_in', ex: 'fade_out' },
+            { id: 'mot_char_reveal', name: 'Character', type: 'sequential_reveal', scale: 1.05, ent: 'type_reveal', ex: 'shrink' },
+          ].map((mp) => (
+            <button
+              key={mp.id}
+              onClick={() => {
+                if (activeCaption) {
+                  updateCaptionAnimation(activeCaption.caption_id, {
+                    entrance: { ...activeCaption.animation.entrance, type: mp.ent as any },
+                    exit: { ...activeCaption.animation.exit, type: mp.ex as any },
+                    word_animation: {
+                      ...activeCaption.animation.word_animation,
+                      type: mp.type as any,
+                      active_scale: mp.scale,
+                    },
+                  });
+                }
+              }}
+              className="p-2 bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 rounded text-left transition"
+            >
+              <div className="font-medium text-zinc-200 truncate">{mp.name}</div>
+              <div className="text-[10px] text-zinc-500 font-mono">{mp.scale}x • {mp.ent}</div>
+            </button>
+          ))}
         </div>
       </div>
 

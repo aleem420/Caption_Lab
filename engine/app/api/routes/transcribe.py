@@ -8,7 +8,11 @@ from app.models.schemas import (
     ModelInfo,
     AudioValidationRequest,
     AudioValidationResponse,
-    WhisperModelSize
+    WhisperModelSize,
+    QualityAnalysisRequest,
+    TranscriptQualityReport,
+    RefineTranscriptRequest,
+    WordModel
 )
 from app.services.transcription import transcription_service
 from app.core.config import settings
@@ -82,3 +86,28 @@ async def transcribe_from_upload(
         )
     finally:
         pass
+
+@router.post("/analyze-quality", response_model=TranscriptQualityReport)
+def analyze_transcript_quality(request: QualityAnalysisRequest):
+    """
+    Evaluates reading speed (CPS/WPM), line balance, safe area constraints,
+    filler words, and transcription confidence for caption quality scoring (Milestone 5).
+    """
+    from app.services.caption_intelligence import caption_intelligence
+    return caption_intelligence.generate_quality_report(
+        captions=request.captions,
+        aspect_ratio=request.aspect_ratio
+    )
+
+@router.post("/refine", response_model=List[WordModel])
+def refine_transcript_words(request: RefineTranscriptRequest):
+    """
+    Applies non-destructive transcript refinement such as filler word removal
+    and repetition cleanup (Milestone 5).
+    """
+    from app.services.caption_intelligence import caption_intelligence
+    return caption_intelligence.refine_words(
+        words=request.words,
+        remove_fillers=request.remove_fillers,
+        remove_repetitions=request.remove_repetitions
+    )

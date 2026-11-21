@@ -176,12 +176,13 @@ export class EngineApiClient {
   }
 
   static async exportCaptions(payload: {
-    output_type: 'srt' | 'vtt' | 'prores_4444' | 'png_sequence' | 'both';
+    output_type: 'srt' | 'vtt' | 'prores_4444' | 'png_sequence' | 'mp4' | 'both' | 'all';
     captions: CaptionItem[];
     resolution: { width: number; height: number };
     fps: number;
     filename_prefix: string;
     output_directory?: string;
+    burn_in_background?: string;
   }) {
     const response = await fetch(`${ENGINE_BASE_URL}/render/export`, {
       method: 'POST',
@@ -230,6 +231,93 @@ export class EngineApiClient {
       headers: this.token ? { 'X-CaptionLab-Token': this.token } : {},
     });
     if (!response.ok) return [];
+    return response.json();
+  }
+
+  // --- Milestone 5: Presets, Fonts & AI Intelligence ---
+
+  static async listPresets(category?: string): Promise<any[]> {
+    const url = category
+      ? `${ENGINE_BASE_URL}/presets/all?category=${encodeURIComponent(category)}`
+      : `${ENGINE_BASE_URL}/presets/all`;
+    const response = await fetch(url, {
+      headers: this.token ? { 'X-CaptionLab-Token': this.token } : {},
+    });
+    if (!response.ok) return [];
+    return response.json();
+  }
+
+  static async getPreset(presetId: string): Promise<any> {
+    const response = await fetch(`${ENGINE_BASE_URL}/presets/${encodeURIComponent(presetId)}`, {
+      headers: this.token ? { 'X-CaptionLab-Token': this.token } : {},
+    });
+    if (!response.ok) throw new Error('Preset not found');
+    return response.json();
+  }
+
+  static async saveCustomPreset(preset: {
+    id: string;
+    name: string;
+    category?: 'style' | 'motion';
+    version?: string;
+    preset_data: any;
+  }) {
+    const response = await fetch(`${ENGINE_BASE_URL}/presets/save`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(this.token ? { 'X-CaptionLab-Token': this.token } : {}),
+      },
+      body: JSON.stringify(preset),
+    });
+    if (!response.ok) throw new Error('Failed to save preset');
+    return response.json();
+  }
+
+  static async deleteCustomPreset(presetId: string) {
+    const response = await fetch(`${ENGINE_BASE_URL}/presets/${encodeURIComponent(presetId)}`, {
+      method: 'DELETE',
+      headers: this.token ? { 'X-CaptionLab-Token': this.token } : {},
+    });
+    if (!response.ok) throw new Error('Failed to delete preset');
+    return response.json();
+  }
+
+  static async listAvailableFonts(): Promise<any[]> {
+    const response = await fetch(`${ENGINE_BASE_URL}/presets/fonts`, {
+      headers: this.token ? { 'X-CaptionLab-Token': this.token } : {},
+    });
+    if (!response.ok) return [];
+    return response.json();
+  }
+
+  static async analyzeQuality(captions: CaptionItem[], aspectRatio: string = '16:9') {
+    const response = await fetch(`${ENGINE_BASE_URL}/transcribe/analyze-quality`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(this.token ? { 'X-CaptionLab-Token': this.token } : {}),
+      },
+      body: JSON.stringify({ captions, aspect_ratio: aspectRatio }),
+    });
+    if (!response.ok) throw new Error('Quality analysis failed');
+    return response.json();
+  }
+
+  static async refineTranscript(words: WordItem[], removeFillers: boolean = false, removeRepetitions: boolean = false) {
+    const response = await fetch(`${ENGINE_BASE_URL}/transcribe/refine`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(this.token ? { 'X-CaptionLab-Token': this.token } : {}),
+      },
+      body: JSON.stringify({
+        words,
+        remove_fillers: removeFillers,
+        remove_repetitions: removeRepetitions,
+      }),
+    });
+    if (!response.ok) throw new Error('Transcript refinement failed');
     return response.json();
   }
 }

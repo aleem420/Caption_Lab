@@ -42,6 +42,12 @@ def export_captions(request: ExportRequest) -> Dict[str, Any]:
         png_dir = output_dir / f"{request.filename_prefix}_png_seq"
         png_meta = ExportService.render_png_sequence(request, png_dir)
         results["png_sequence"] = png_meta
+
+    # 5. Burned-in H.264 MP4 (Milestone 5)
+    if request.output_type in ["mp4", "all"]:
+        mp4_path = output_dir / f"{request.filename_prefix}_burned.mp4"
+        actual_mp4_path = ExportService.render_burned_mp4(request, mp4_path)
+        results["mp4_path"] = str(actual_mp4_path.resolve())
         
     return {
         "status": "success",

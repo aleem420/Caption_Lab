@@ -171,6 +171,34 @@ class CaptionLayoutEngine:
         return captions
 
     @staticmethod
+    def wrap_words_into_lines(words: List[WordModel], max_chars_per_line: int = 36) -> List[List[WordModel]]:
+        """
+        Dynamically wraps words into balanced lines without breaking atomic Hindi words or matras (Milestone 5).
+        """
+        if not words:
+            return []
+        
+        lines: List[List[WordModel]] = []
+        current_line: List[WordModel] = []
+        current_len = 0
+        
+        for w in words:
+            word_len = len(w.text)
+            needed_space = 1 if current_line else 0
+            if current_line and (current_len + needed_space + word_len) > max_chars_per_line:
+                lines.append(current_line)
+                current_line = [w]
+                current_len = word_len
+            else:
+                current_line.append(w)
+                current_len += needed_space + word_len
+                
+        if current_line:
+            lines.append(current_line)
+            
+        return lines
+
+    @staticmethod
     def apply_style_preset(caption: CaptionModel, preset_data: dict) -> CaptionModel:
         """
         Applies a style preset while strictly preserving user-overridden properties (PRD Section 9.10).

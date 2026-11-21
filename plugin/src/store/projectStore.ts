@@ -9,6 +9,9 @@ import {
   TypographyStyle,
   BackgroundStyle,
   AnimationConfig,
+  CustomPreset,
+  FontInfo,
+  TranscriptQualityReport,
 } from '../types';
 import { EngineApiClient } from '../services/api';
 
@@ -425,6 +428,24 @@ interface ProjectStoreState {
   applyPresetToCaption: (captionId: string, presetId: string) => void;
   applyPresetToAllCaptions: (presetId: string) => void;
 
+  // Milestone 5: Presets, Fonts & Studio
+  availableFonts: FontInfo[];
+  customPresets: CustomPreset[];
+  qualityReport: TranscriptQualityReport | null;
+  isAnalyzingQuality: boolean;
+  videoPreviewUrl: string | null;
+  timelineZoom: number;
+
+  fetchFonts: () => Promise<void>;
+  fetchPresets: () => Promise<void>;
+  saveCustomPreset: (name: string, category?: 'style' | 'motion') => Promise<void>;
+  deleteCustomPreset: (id: string) => Promise<void>;
+  runQualityAnalysis: (aspectRatio?: string) => Promise<void>;
+  refineTranscript: (removeFillers: boolean, removeRepetitions: boolean) => Promise<void>;
+  setVideoPreviewUrl: (url: string | null) => void;
+  setTimelineZoom: (zoom: number) => void;
+  stepFrame: (deltaFrames: number) => void;
+
   undo: () => void;
   redo: () => void;
 }
@@ -445,6 +466,14 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
   isDirty: false,
   lastSavedAt: null,
   saveError: null,
+
+  // Milestone 5 Defaults
+  availableFonts: [],
+  customPresets: [],
+  qualityReport: null,
+  isAnalyzingQuality: false,
+  videoPreviewUrl: null,
+  timelineZoom: 1.0,
 
   setTab: (tab) => set({ currentTab: tab }),
   setProject: (project) =>
@@ -1021,6 +1050,94 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
       isDirty: true,
     });
     scheduleAutoSave(get().saveProjectToServer);
+  },
+
+  setVideoPreviewUrl: (url) => set({ videoPreviewUrl: url }),
+  setTimelineZoom: (zoom) => set({ timelineZoom: Math.max(0.5, Math.min(3.0, zoom)) }),
+  stepFrame: (deltaFrames) => {
+    const { currentTime, project } = get();
+    const fps = project.project.fps || 30.0;
+    const newTime = Math.max(0, currentTime + deltaFrames / fps);
+    set({ currentTime: newTime });
+  },
+
+  fetchFonts: async () => {
+    try {
+      const fonts = await EngineApiClient.listAvailableFonts();
+      set({ availableFonts: fonts });
+    } catch {
+      // Offline fallback
+    }
+  },
+
+  fetchPresets: async () => {
+    try {
+      const presets = await EngineApiClient.listPresets();
+      set({ customPresets: presets });
+    } catch {
+      // Offline fallback
+    }
+  },
+
+  saveCustomPreset: async (name: string, category: 'style' | 'motion' = 'style') => {
+    const { project, activeCaptionId } = get();
+    const cap = project.captions.find((c) => c.caption_id === activeCaptionId) || project.captions[0];
+    if (!cap) return;
+
+    const presetId = `custom_${Date.now()}`;
+    const presetData = category === 'style'
+      ? {
+          layout_family: cap.layout_family,
+          typography: cap.typography,
+          background: cap.background,
+          animation: cap.animation,
+        }
+      : cap.animation;
+
+    await EngineApiClient.saveCustomPreset({
+      id: presetId,
+      name,
+      category,
+      version: '1.3.0',
+      preset_data: presetData,
+    });
+    await get().fetchPresets();
+  },
+
+  deleteCustomPreset: async (id: string) => {
+    await EngineApiClient.deleteCustomPreset(id);
+    await get().fetchPresets();
+  },
+
+  runQualityAnalysis: async (aspectRatio: string = '16:9') => {
+    const { project } = get();
+    if (!project.captions.length) return;
+    set({ isAnalyzingQuality: true });
+    try {
+      const report = await EngineApiClient.analyzeQuality(project.captions, aspectRatio);
+      set({ qualityReport: report, isAnalyzingQuality: false });
+    } catch {
+      set({ isAnalyzingQuality: false });
+    }
+  },
+
+  refineTranscript: async (removeFillers: boolean, removeRepetitions: boolean) => {
+    const { project } = get();
+    if (!project.transcript.words.length) return;
+    try {
+      const refined = await EngineApiClient.refineTranscript(
+        project.transcript.words,
+        removeFillers,
+        removeRepetitions
+      );
+      const cloned = JSON.parse(JSON.stringify(project));
+      cloned.transcript.words = refined;
+      cloned.project.updated_at = new Date().toISOString();
+      set({ project: cloned, isDirty: true });
+      await get().recalculateCaptionGroupings();
+    } catch (e) {
+      console.error(e);
+    }
   },
 
   undo: () => {

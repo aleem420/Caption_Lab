@@ -35,12 +35,17 @@ export const TranscriptEditorTab: React.FC = () => {
     splitSentence,
     mergeSentences,
     recalculateCaptionGroupings,
+    qualityReport,
+    isAnalyzingQuality,
+    runQualityAnalysis,
+    refineTranscript,
   } = useProjectStore();
 
   const [editingWordId, setEditingWordId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [isRegrouping, setIsRegrouping] = useState(false);
+  const [isRefining, setIsRefining] = useState(false);
 
   const sentences = project.transcript.sentences || [];
 
@@ -166,6 +171,41 @@ export const TranscriptEditorTab: React.FC = () => {
             <Sparkles className="w-3.5 h-3.5 text-amber-400" />
             <span>{isRegrouping ? 'Grouping...' : 'Regroup Captions'}</span>
           </button>
+
+          {/* Milestone 5: AI Quality Analysis & Refinement */}
+          <button
+            onClick={() => runQualityAnalysis()}
+            disabled={isAnalyzingQuality || project.captions.length === 0}
+            title="Evaluate reading speed, safe area compliance & filler words"
+            className="flex items-center space-x-1.5 px-2.5 py-1 bg-emerald-950/60 hover:bg-emerald-900 border border-emerald-800/80 text-emerald-300 rounded font-medium transition"
+          >
+            <span>{isAnalyzingQuality ? 'Auditing...' : 'Quality Audit'}</span>
+          </button>
+
+          <button
+            onClick={async () => {
+              setIsRefining(true);
+              await refineTranscript(true, true);
+              setIsRefining(false);
+            }}
+            disabled={isRefining || allWords.length === 0}
+            title="Clean up Hindi/English filler words and repeated stutters"
+            className="flex items-center space-x-1.5 px-2.5 py-1 bg-purple-950/60 hover:bg-purple-900 border border-purple-800/80 text-purple-300 rounded font-medium transition"
+          >
+            <span>{isRefining ? 'Refining...' : 'Refine Fillers'}</span>
+          </button>
+
+          {qualityReport && (
+            <div className="flex items-center space-x-2 bg-zinc-950 px-2.5 py-1 rounded border border-zinc-800 text-[11px]">
+              <span className={`font-bold ${qualityReport.quality_score >= 90 ? 'text-emerald-400' : qualityReport.quality_score >= 75 ? 'text-amber-400' : 'text-red-400'}`}>
+                Score: {qualityReport.quality_score}/100
+              </span>
+              <span className="text-zinc-500">•</span>
+              <span className="text-zinc-400 font-mono">CPS: {qualityReport.average_cps}</span>
+              <span className="text-zinc-500">•</span>
+              <span className="text-zinc-400 font-mono">WPM: {qualityReport.average_wpm}</span>
+            </div>
+          )}
         </div>
 
         {/* Search */}

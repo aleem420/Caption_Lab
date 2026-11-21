@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from app.core.config import settings
 from app.services.db import db_service
-from app.api.routes import health, transcribe, render, project
+from app.api.routes import health, transcribe, render, project, presets
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -37,6 +37,7 @@ app.include_router(health.router)
 app.include_router(transcribe.router)
 app.include_router(render.router)
 app.include_router(project.router)
+app.include_router(presets.router)
 
 @app.get("/")
 def root():
