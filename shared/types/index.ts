@@ -60,6 +60,15 @@ export interface Resolution {
   aspect_ratio: string;
 }
 
+export interface AudioMetadata {
+  duration_seconds?: number;
+  sample_rate?: number;
+  channels?: number;
+  format?: string;
+}
+
+export type RenderStatus = 'idle' | 'rendering' | 'completed' | 'failed' | 'interrupted';
+
 // Normalized Screen Coordinates (0.0 - 1.0) (PRD Section 10.7)
 export interface NormalizedCoordinates {
   x: number;
@@ -293,6 +302,8 @@ export interface CaptionLabProject {
     height: number;
     audio_source_path?: string;
     video_source_path?: string;
+    audio_metadata?: AudioMetadata;
+    render_status?: RenderStatus;
   };
   transcript: {
     language: string;

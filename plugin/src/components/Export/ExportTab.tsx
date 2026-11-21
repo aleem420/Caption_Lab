@@ -18,12 +18,24 @@ import { PremiereBridge } from '../../services/premiereBridge';
 export const ExportTab: React.FC = () => {
   const { project } = useProjectStore();
   const [outputType, setOutputType] = useState<'both' | 'prores_4444' | 'srt' | 'png_sequence'>('both');
-  const [resolution, setResolution] = useState<{ width: number; height: number }>({ width: 1920, height: 1080 });
-  const [fps, setFps] = useState<number>(30.0);
+  const [resolution, setResolution] = useState<{ width: number; height: number }>({
+    width: project.project.width || 1920,
+    height: project.project.height || 1080,
+  });
+  const [fps, setFps] = useState<number>(project.project.fps || 30.0);
   const [filenamePrefix, setFilenamePrefix] = useState('CaptionLab_Hindi_Captions');
   const [isExporting, setIsExporting] = useState(false);
   const [exportResult, setExportResult] = useState<any | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Synchronize with active project sequence context
+  React.useEffect(() => {
+    setResolution({
+      width: project.project.width || 1920,
+      height: project.project.height || 1080,
+    });
+    setFps(project.project.fps || 30.0);
+  }, [project.project.width, project.project.height, project.project.fps]);
 
   const handleExport = async () => {
     setIsExporting(true);

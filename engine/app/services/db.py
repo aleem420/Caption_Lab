@@ -8,6 +8,7 @@ from app.core.config import settings
 class DatabaseService:
     def __init__(self, db_path: Path = settings.DB_PATH):
         self.db_path = str(db_path)
+        self._sync_init_db()
 
     def _sync_init_db(self):
         with sqlite3.connect(self.db_path) as conn:

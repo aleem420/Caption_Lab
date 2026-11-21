@@ -1,5 +1,18 @@
+/**
+ * CaptionLab Shared Type Definitions
+ * Version: 1.2
+ * Corresponds to PRD Sections 6, 8, 9, 10, 12, 13, 20 & Phase 2/3 Decisions
+ */
+
+// Property Provenance System (PRD Section 9.10)
 export type PropertyProvenance = 'DEFAULT' | 'AUTO' | 'USER' | 'IMPORTED';
 
+export interface ProvenanceValue<T> {
+  value: T;
+  provenance: PropertyProvenance;
+}
+
+// Whisper Model Selection & Metadata (Phase 2 Decision: small is default, base is Fast Mode)
 export type WhisperModelSize = 'tiny' | 'base' | 'small' | 'medium' | 'large';
 export type ProcessingDevice = 'cpu' | 'cuda';
 export type AudioSourceType = 'direct_media' | 'sequence_audio' | 'timeline_range';
@@ -28,6 +41,7 @@ export interface AudioValidationResult {
   extracted_cache_path?: string;
 }
 
+// Layout Families (PRD Section 10.4)
 export type LayoutFamily =
   | 'single_line'
   | 'balanced_two_line'
@@ -38,6 +52,24 @@ export type LayoutFamily =
   | 'boxed'
   | 'cinematic';
 
+// Screen Resolutions & Aspect Ratios (PRD Section 10.6)
+export interface Resolution {
+  width: number;
+  height: number;
+  label?: string;
+  aspect_ratio: string;
+}
+
+export interface AudioMetadata {
+  duration_seconds?: number;
+  sample_rate?: number;
+  channels?: number;
+  format?: string;
+}
+
+export type RenderStatus = 'idle' | 'rendering' | 'completed' | 'failed' | 'interrupted';
+
+// Normalized Screen Coordinates (0.0 - 1.0) (PRD Section 10.7)
 export interface NormalizedCoordinates {
   x: number;
   y: number;
@@ -45,6 +77,7 @@ export interface NormalizedCoordinates {
   height: number;
 }
 
+// Word Entity with Timestamp & Correction Status (PRD Section 6.5)
 export interface WordItem {
   word_id: string;
   text: string;
@@ -59,6 +92,7 @@ export interface WordItem {
   custom_stroke?: string;
 }
 
+// Sentence / Segment Entity
 export interface SentenceSegment {
   sentence_id: string;
   speaker_id: string | null;
@@ -68,6 +102,7 @@ export interface SentenceSegment {
   words: WordItem[];
 }
 
+// Typography Configuration (PRD Section 9.5 & 11)
 export interface TypographyStyle {
   font_family: string;
   font_weight: number | string;
@@ -85,6 +120,7 @@ export interface TypographyStyle {
   shadow_offset_y?: number;
 }
 
+// Background Box Style (PRD Section 9.6)
 export interface BackgroundStyle {
   enabled: boolean;
   color: string;
@@ -96,6 +132,7 @@ export interface BackgroundStyle {
   border_width?: number;
 }
 
+// Animation Definitions (PRD Section 12)
 export type EntranceAnimationType =
   | 'none'
   | 'fade_in'
@@ -130,28 +167,86 @@ export type WordAnimationType =
   | 'word_scale'
   | 'word_color_transition';
 
+export interface Keyframe {
+  frame: number;
+  time: number;
+  properties: {
+    position_x?: number;
+    position_y?: number;
+    scale?: number;
+    opacity?: number;
+    rotation?: number;
+    blur?: number;
+    glow?: number;
+  };
+  easing?: 'linear' | 'ease_in' | 'ease_out' | 'ease_in_out' | 'elastic';
+}
+
 export interface AnimationConfig {
   entrance: {
-    type: EntranceAnimationType | string;
+    type: EntranceAnimationType;
     duration_frames: number;
   };
   emphasis: {
-    type: EmphasisAnimationType | string;
+    type: EmphasisAnimationType;
     duration_frames: number;
     repeat?: boolean;
   };
   exit: {
-    type: ExitAnimationType | string;
+    type: ExitAnimationType;
     duration_frames: number;
   };
   word_animation: {
-    type: WordAnimationType | string;
+    type: WordAnimationType;
     active_color?: string;
     inactive_color?: string;
     active_scale?: number;
   };
+  keyframes?: Keyframe[];
 }
 
+// Text Block Entity (PRD Section 9.2 Level 2)
+export interface TextBlock {
+  block_id: string;
+  text: string;
+  word_ids: string[];
+  typography: TypographyStyle;
+  background?: BackgroundStyle;
+  position_offset?: { x: number; y: number };
+  animation?: Partial<AnimationConfig>;
+  provenance: PropertyProvenance;
+}
+
+// Caption Layer (PRD Section 9.3)
+export type LayerType =
+  | 'text'
+  | 'shape'
+  | 'background'
+  | 'highlight'
+  | 'decorative'
+  | 'effect'
+  | 'group';
+
+export interface LayerItem {
+  layer_id: string;
+  name: string;
+  type: LayerType;
+  visible: boolean;
+  locked: boolean;
+  opacity: number;
+  z_index: number;
+  transform: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    rotation: number;
+    scale: number;
+  };
+  style: Record<string, unknown>;
+}
+
+// Caption Item (PRD Section 8.5)
 export interface CaptionItem {
   caption_id: string;
   start_frame: number;
@@ -160,6 +255,8 @@ export interface CaptionItem {
   end_time: number;
   duration: number;
   words: WordItem[];
+  text_blocks: TextBlock[];
+  layers: LayerItem[];
   layout_family: LayoutFamily;
   coordinates: NormalizedCoordinates;
   typography: TypographyStyle;
@@ -168,6 +265,7 @@ export interface CaptionItem {
   user_overridden_properties: string[];
 }
 
+// Caption Style Preset (PRD Section 13)
 export interface StylePreset {
   id: string;
   name: string;
@@ -179,6 +277,19 @@ export interface StylePreset {
   version: string;
 }
 
+// Export Configuration (PRD Section 16)
+export interface ExportConfig {
+  output_type: 'srt' | 'vtt' | 'prores_4444' | 'png_sequence' | 'both';
+  resolution: { width: number; height: number };
+  fps: number;
+  start_time?: number;
+  end_time?: number;
+  output_directory: string;
+  filename_prefix: string;
+  render_background_transparency: boolean;
+}
+
+// Project Manifest Root Structure (PRD Section 20)
 export interface CaptionLabProject {
   project: {
     id: string;
@@ -191,6 +302,8 @@ export interface CaptionLabProject {
     height: number;
     audio_source_path?: string;
     video_source_path?: string;
+    audio_metadata?: AudioMetadata;
+    render_status?: RenderStatus;
   };
   transcript: {
     language: string;
@@ -201,4 +314,5 @@ export interface CaptionLabProject {
   };
   captions: CaptionItem[];
   presets: StylePreset[];
+  export_settings?: ExportConfig;
 }

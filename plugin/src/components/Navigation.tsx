@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   Home,
   Mic,
@@ -10,6 +10,10 @@ import {
   Undo2,
   Redo2,
   RefreshCw,
+  Loader2,
+  CheckCircle2,
+  AlertCircle,
+  Save,
 } from 'lucide-react';
 import { useProjectStore, NavigationTab } from '../store/projectStore';
 import { EngineApiClient } from '../services/api';
@@ -24,7 +28,23 @@ export const Navigation: React.FC = () => {
     redo,
     historyStack,
     redoStack,
+    isSaving,
+    isDirty,
+    lastSavedAt,
+    saveError,
+    saveProjectToServer,
   } = useProjectStore();
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        saveProjectToServer();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [saveProjectToServer]);
 
   const handleRetryConnection = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -101,24 +121,63 @@ export const Navigation: React.FC = () => {
         })}
       </nav>
 
-      {/* History Controls */}
-      <div className="flex items-center space-x-1">
+      {/* Save Status & History Controls */}
+      <div className="flex items-center space-x-2">
         <button
-          onClick={undo}
-          disabled={historyStack.length === 0}
-          title="Undo"
-          className="p-1.5 text-zinc-400 hover:text-zinc-100 disabled:opacity-30 disabled:cursor-not-allowed rounded hover:bg-zinc-800 transition"
+          onClick={() => saveProjectToServer()}
+          disabled={isSaving}
+          title={saveError || (isDirty ? 'Unsaved changes (Ctrl+S to save)' : `Project saved (${lastSavedAt || 'Synced'})`)}
+          className={`flex items-center space-x-1.5 px-2 py-0.5 rounded text-[11px] border transition ${
+            saveError
+              ? 'bg-red-950/60 border-red-800 text-red-300 hover:bg-red-900/60'
+              : isSaving
+              ? 'bg-blue-950/60 border-blue-800 text-blue-300'
+              : isDirty
+              ? 'bg-amber-950/60 border-amber-800 text-amber-300 hover:bg-amber-900/60'
+              : 'bg-zinc-950/60 border-zinc-800 text-zinc-400 hover:text-zinc-200'
+          }`}
         >
-          <Undo2 className="w-3.5 h-3.5" />
+          {isSaving ? (
+            <>
+              <Loader2 className="w-3 h-3 animate-spin text-blue-400" />
+              <span>Saving...</span>
+            </>
+          ) : saveError ? (
+            <>
+              <AlertCircle className="w-3 h-3 text-red-400" />
+              <span>Save error</span>
+            </>
+          ) : isDirty ? (
+            <>
+              <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+              <span>Save (Ctrl+S)</span>
+            </>
+          ) : (
+            <>
+              <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+              <span>Saved</span>
+            </>
+          )}
         </button>
-        <button
-          onClick={redo}
-          disabled={redoStack.length === 0}
-          title="Redo"
-          className="p-1.5 text-zinc-400 hover:text-zinc-100 disabled:opacity-30 disabled:cursor-not-allowed rounded hover:bg-zinc-800 transition"
-        >
-          <Redo2 className="w-3.5 h-3.5" />
-        </button>
+
+        <div className="flex items-center space-x-1 border-l border-zinc-800 pl-2">
+          <button
+            onClick={undo}
+            disabled={historyStack.length === 0}
+            title="Undo (Ctrl+Z)"
+            className="p-1.5 text-zinc-400 hover:text-zinc-100 disabled:opacity-30 disabled:cursor-not-allowed rounded hover:bg-zinc-800 transition"
+          >
+            <Undo2 className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={redo}
+            disabled={redoStack.length === 0}
+            title="Redo (Ctrl+Y)"
+            className="p-1.5 text-zinc-400 hover:text-zinc-100 disabled:opacity-30 disabled:cursor-not-allowed rounded hover:bg-zinc-800 transition"
+          >
+            <Redo2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
     </header>
   );

@@ -24,7 +24,7 @@ import { PremiereBridge } from '../../services/premiereBridge';
 import { WhisperModelSize, ProcessingDevice, AudioSourceType, ModelInfo, AudioValidationResult } from '../../types';
 
 export const TranscribeTab: React.FC = () => {
-  const { setProject, project, setTab } = useProjectStore();
+  const { setProject, project, setTab, saveProjectToServer } = useProjectStore();
   
   // Audio Source State (Hybrid System: Source A, B, C)
   const [sourceType, setSourceType] = useState<AudioSourceType>('sequence_audio');
@@ -132,6 +132,7 @@ export const TranscribeTab: React.FC = () => {
       };
 
       setProject(updatedProject);
+      await saveProjectToServer();
       setProgressText('Transcription Complete! Opening Editor...');
       setTimeout(() => {
         setIsProcessing(false);
@@ -258,6 +259,30 @@ export const TranscribeTab: React.FC = () => {
               className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded font-medium transition shrink-0"
             >
               {isValidating ? 'Validating...' : 'Validate File'}
+            </button>
+          </div>
+
+          <div className="flex items-center space-x-2 pt-1 text-[11px]">
+            <span className="text-zinc-500">Quick Samples:</span>
+            <button
+              type="button"
+              onClick={() => {
+                setFilePath('test_media/sample_hindi_hinglish.wav');
+                setSourceType('direct_media');
+              }}
+              className="px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-blue-300 transition"
+            >
+              sample_hindi_hinglish.wav
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setFilePath('test_media/sample_hindi_hinglish.mp4');
+                setSourceType('direct_media');
+              }}
+              className="px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-blue-300 transition"
+            >
+              sample_hindi_hinglish.mp4
             </button>
           </div>
 

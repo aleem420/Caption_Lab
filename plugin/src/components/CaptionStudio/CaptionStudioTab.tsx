@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Palette,
   Layout,
@@ -11,6 +11,7 @@ import {
   Play,
   Pause,
   Sliders,
+  RotateCcw,
 } from 'lucide-react';
 import { useProjectStore } from '../../store/projectStore';
 import { LayoutFamily } from '../../types';
@@ -35,7 +36,67 @@ export const CaptionStudioTab: React.FC = () => {
   const [aspectRatio, setAspectRatio] = useState<'16:9' | '9:16' | '1:1'>('16:9');
   const [showSafeAreas, setShowSafeAreas] = useState(true);
 
-  const activeCaption = project.captions.find((c) => c.caption_id === activeCaptionId) || project.captions[0];
+  // Animation playback loop
+  useEffect(() => {
+    let animId: number;
+    if (isPlaying) {
+      let lastTime = performance.now();
+      const tick = (now: number) => {
+        const delta = (now - lastTime) / 1000;
+        lastTime = now;
+        const maxTime = project.captions.length > 0
+          ? Math.max(...project.captions.map((c) => c.end_time))
+          : 10;
+        const nextTime = useProjectStore.getState().currentTime + delta;
+        if (nextTime >= maxTime) {
+          setCurrentTime(maxTime);
+          setIsPlaying(false);
+        } else {
+          setCurrentTime(nextTime);
+          animId = requestAnimationFrame(tick);
+        }
+      };
+      animId = requestAnimationFrame(tick);
+    }
+    return () => cancelAnimationFrame(animId);
+  }, [isPlaying, project.captions, setCurrentTime, setIsPlaying]);
+
+  // Determine currently active caption to display
+  // When playing, track time-active caption. When paused, fall back to activeCaptionId.
+  const timeActiveCaption = project.captions.find(
+    (c) => currentTime >= c.start_time && currentTime <= c.end_time
+  );
+  const activeCaption = isPlaying
+    ? timeActiveCaption
+    : project.captions.find((c) => c.caption_id === activeCaptionId) || project.captions[0];
+
+  const totalDuration = project.captions.length > 0
+    ? Math.max(...project.captions.map((c) => c.end_time))
+    : 10.0;
+
+  // Calculate entrance scale & exit alpha for active caption
+  let entranceScale = 1.0;
+  let exitAlpha = 1.0;
+
+  if (activeCaption) {
+    // Entrance pop-in (first 0.20s): 0.80 -> 1.0 with cubic ease-out
+    if (activeCaption.animation.entrance.type === 'pop_in') {
+      const elapsed = currentTime - activeCaption.start_time;
+      if (elapsed >= 0 && elapsed < 0.20) {
+        const t = elapsed / 0.20;
+        const easeOut = 1 - Math.pow(1 - t, 3);
+        entranceScale = 0.80 + 0.20 * easeOut;
+      }
+    }
+
+    // Exit alpha fade (last 0.20s): 1.0 -> 0.0
+    if (activeCaption.animation.exit.type === 'fade_out') {
+      const remaining = activeCaption.end_time - currentTime;
+      if (remaining >= 0 && remaining < 0.20) {
+        exitAlpha = Math.max(0, remaining / 0.20);
+      }
+    }
+  }
 
   const layoutFamilies: { id: LayoutFamily; label: string }[] = [
     { id: 'single_line', label: 'Single Line' },
@@ -83,9 +144,9 @@ export const CaptionStudioTab: React.FC = () => {
             </label>
             <button
               onClick={() => setIsPlaying(!isPlaying)}
-              className="flex items-center space-x-1 px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded"
+              className="flex items-center space-x-1.5 px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded font-medium transition shadow-sm"
             >
-              {isPlaying ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3 fill-zinc-200" />}
+              {isPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 fill-white" />}
               <span>{isPlaying ? 'Pause' : 'Play'}</span>
             </button>
           </div>
@@ -103,10 +164,14 @@ export const CaptionStudioTab: React.FC = () => {
           >
             {/* Safe Area Outlines */}
             {showSafeAreas && (
-              <div className="absolute inset-[10%] border border-blue-500/20 pointer-events-none rounded">
+              <div
+                className={`absolute border border-blue-500/20 pointer-events-none rounded ${
+                  aspectRatio === '9:16' ? 'inset-x-[10%] top-[15%] bottom-[20%]' : 'inset-[10%]'
+                }`}
+              >
                 <div className="absolute inset-[5%] border border-emerald-500/15 pointer-events-none" />
                 <span className="absolute bottom-1 right-2 text-[9px] text-zinc-600 uppercase font-mono">
-                  Safe Area
+                  Safe Area ({aspectRatio})
                 </span>
               </div>
             )}
@@ -118,19 +183,23 @@ export const CaptionStudioTab: React.FC = () => {
                   position: 'absolute',
                   left: `${activeCaption.coordinates.x * 100}%`,
                   top: `${activeCaption.coordinates.y * 100}%`,
-                  transform: 'translate(-50%, -50%)',
+                  transform: `translate(-50%, -50%) scale(${entranceScale})`,
+                  opacity: exitAlpha,
                   maxWidth: `${activeCaption.coordinates.width * 100}%`,
+                  transition: 'opacity 0.05s linear, transform 0.08s ease-out',
                 }}
-                className="text-center transition-all cursor-move"
+                className="text-center cursor-move"
               >
                 <div
                   style={{
-                    backgroundColor: activeCaption.background.enabled || activeCaption.layout_family === 'boxed'
-                      ? activeCaption.background.color
-                      : 'transparent',
-                    opacity: activeCaption.background.enabled || activeCaption.layout_family === 'boxed'
-                      ? activeCaption.background.opacity
-                      : 1,
+                    backgroundColor:
+                      activeCaption.background.enabled || activeCaption.layout_family === 'boxed'
+                        ? activeCaption.background.color
+                        : 'transparent',
+                    opacity:
+                      activeCaption.background.enabled || activeCaption.layout_family === 'boxed'
+                        ? activeCaption.background.opacity
+                        : 1,
                     borderRadius: `${activeCaption.background.border_radius}px`,
                     padding: `${activeCaption.background.padding_y}px ${activeCaption.background.padding_x}px`,
                   }}
@@ -155,16 +224,22 @@ export const CaptionStudioTab: React.FC = () => {
                   >
                     {activeCaption.words.map((w, wIdx) => {
                       const isWordActive = currentTime >= w.start && currentTime <= w.end;
+                      const activeColor =
+                        activeCaption.animation.word_animation.active_color || '#FFDF00';
+                      const activeScale =
+                        activeCaption.animation.word_animation.type === 'word_pop' ? 1.15 : 1.1;
+
                       return (
                         <span
                           key={w.word_id || wIdx}
                           style={{
                             color: isWordActive
-                              ? activeCaption.animation.word_animation.active_color || '#FFDF00'
+                              ? activeColor
                               : w.custom_color || activeCaption.typography.color,
-                            transform: isWordActive ? 'scale(1.1)' : 'scale(1)',
+                            transform: isWordActive ? `scale(${activeScale})` : 'scale(1.0)',
                             display: 'inline-block',
-                            transition: 'all 0.15s ease',
+                            transformOrigin: 'center baseline',
+                            transition: 'transform 0.08s cubic-bezier(0.2, 0.8, 0.2, 1), color 0.1s ease',
                           }}
                           className="mr-1.5"
                         >
@@ -179,8 +254,34 @@ export const CaptionStudioTab: React.FC = () => {
           </div>
         </div>
 
+        {/* Timeline Playback Scrubber Bar */}
+        <div className="bg-zinc-900 border-t border-zinc-800 px-4 py-2 flex items-center space-x-3 text-xs">
+          <button
+            onClick={() => {
+              setCurrentTime(0);
+              setIsPlaying(false);
+            }}
+            title="Reset Playhead"
+            className="p-1 text-zinc-400 hover:text-zinc-200"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+          </button>
+          <input
+            type="range"
+            min="0"
+            max={totalDuration}
+            step="0.05"
+            value={currentTime}
+            onChange={(e) => setCurrentTime(parseFloat(e.target.value))}
+            className="flex-1 accent-blue-600"
+          />
+          <span className="font-mono text-zinc-400 text-[11px] shrink-0">
+            {currentTime.toFixed(2)}s / {totalDuration.toFixed(2)}s
+          </span>
+        </div>
+
         {/* Caption Navigator Carousel (Bottom) */}
-        <div className="bg-zinc-900 border-t border-zinc-800 px-4 py-2.5 flex items-center space-x-3 overflow-x-auto text-xs">
+        <div className="bg-zinc-900/90 border-t border-zinc-800 px-4 py-2.5 flex items-center space-x-3 overflow-x-auto text-xs">
           <span className="text-[10px] text-zinc-500 uppercase tracking-wider shrink-0 font-semibold">
             Captions ({project.captions.length}):
           </span>
@@ -198,7 +299,7 @@ export const CaptionStudioTab: React.FC = () => {
               }`}
             >
               <div className="text-[9px] text-zinc-500 font-mono">
-                #{idx + 1} • {cap.start_time.toFixed(1)}s
+                #{idx + 1} • {cap.start_time.toFixed(1)}s - {cap.end_time.toFixed(1)}s
               </div>
               <div className="truncate max-w-[130px] font-devanagari text-xs text-zinc-200">
                 {cap.words.map((w) => w.text).join(' ')}
@@ -231,7 +332,14 @@ export const CaptionStudioTab: React.FC = () => {
             ))}
           </div>
           <button
-            onClick={() => activeCaption && applyPresetToAllCaptions(activeCaption.layout_family)}
+            onClick={() => {
+              if (activeCaption) {
+                const matchedPreset = project.presets.find(
+                  (p) => p.layout_family === activeCaption.layout_family
+                ) || project.presets[0];
+                applyPresetToAllCaptions(matchedPreset.id);
+              }
+            }}
             className="w-full py-1 text-[11px] bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded transition mt-1"
           >
             Apply Preset to All Captions

@@ -9,6 +9,7 @@ sys.path.insert(0, str(engine_dir))
 from tests.run_tests import TestCaptionLabPhase2Phase3
 from tests.test_visual_qa import TestVisualAndAnimationQA
 from tests.test_stress_and_benchmarks import TestStressAndProductionBenchmarks
+from tests.test_project_persistence import TestProjectPersistence
 
 def suite():
     s = unittest.TestSuite()
@@ -16,6 +17,7 @@ def suite():
     s.addTests(loader.loadTestsFromTestCase(TestCaptionLabPhase2Phase3))
     s.addTests(loader.loadTestsFromTestCase(TestVisualAndAnimationQA))
     s.addTests(loader.loadTestsFromTestCase(TestStressAndProductionBenchmarks))
+    s.addTests(loader.loadTestsFromTestCase(TestProjectPersistence))
     return s
 
 if __name__ == "__main__":

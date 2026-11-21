@@ -28,6 +28,8 @@ engine/scratch/
 engine/models_cache/
 engine/audio_cache/
 engine/renders/
+engine/data/
+*.db
 test_media/
 test_output/
 *.tmp

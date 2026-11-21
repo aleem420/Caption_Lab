@@ -17,6 +17,63 @@ class CaptionLayoutEngine:
     """
     
     @staticmethod
+    def get_layout_defaults(layout_family: str):
+        coords = NormalizedCoordinatesModel(x=0.5, y=0.82, width=0.85, height=0.15)
+        bg = BackgroundModel(enabled=(layout_family == "boxed"))
+        typo = TypographyModel()
+
+        if layout_family == "single_line":
+            coords.y = 0.85
+            coords.height = 0.10
+        elif layout_family == "stacked":
+            coords.y = 0.80
+            coords.height = 0.18
+        elif layout_family == "keyword_highlight":
+            coords.y = 0.80
+            coords.height = 0.15
+        elif layout_family == "word_by_word":
+            coords.y = 0.82
+            coords.height = 0.12
+            coords.width = 0.70
+        elif layout_family == "speaker_based":
+            coords.y = 0.80
+            coords.x = 0.40
+            coords.width = 0.80
+        elif layout_family == "boxed":
+            bg.enabled = True
+            bg.color = "#111827"
+            bg.opacity = 0.85
+            bg.border_radius = 10
+            bg.padding_x = 24
+            bg.padding_y = 12
+        elif layout_family == "cinematic":
+            coords.y = 0.88
+            coords.height = 0.10
+            typo.font_family = "Noto Serif Devanagari"
+            typo.letter_spacing = 1.5
+
+        return coords, bg, typo
+
+    @staticmethod
+    def clamp_to_safe_area(coords: NormalizedCoordinatesModel, aspect_ratio: str = "16:9") -> NormalizedCoordinatesModel:
+        if aspect_ratio == "9:16":
+            min_y, max_y = 0.15, 0.80
+        else:
+            min_y, max_y = 0.10, 0.90
+
+        clamped_x = max(0.10, min(0.90, coords.x))
+        clamped_y = max(min_y, min(max_y, coords.y))
+        clamped_w = max(0.20, min(0.85, coords.width))
+        clamped_h = max(0.05, min(0.40, coords.height))
+
+        return NormalizedCoordinatesModel(
+            x=round(clamped_x, 3),
+            y=round(clamped_y, 3),
+            width=round(clamped_w, 3),
+            height=round(clamped_h, 3)
+        )
+
+    @staticmethod
     def group_words_into_captions(
         words: List[WordModel],
         max_words_per_caption: int = 5,
@@ -30,7 +87,16 @@ class CaptionLayoutEngine:
         """
         if not words:
             return []
-            
+
+        # Family-aware word limit tuning
+        if layout_family in ("single_line", "keyword_highlight"):
+            effective_max_words = min(max_words_per_caption, 4)
+        elif layout_family == "word_by_word":
+            effective_max_words = 2
+            min_duration = 0.3
+        else:
+            effective_max_words = max_words_per_caption
+
         captions: List[CaptionModel] = []
         current_chunk: List[WordModel] = []
         caption_idx = 1
@@ -39,7 +105,7 @@ class CaptionLayoutEngine:
             current_chunk.append(word)
             chunk_duration = current_chunk[-1].end - current_chunk[0].start
             is_punctuation = word.text.endswith((".", "!", "?", "।", "|"))
-            is_max_words = len(current_chunk) >= max_words_per_caption
+            is_max_words = len(current_chunk) >= effective_max_words
             is_max_duration = chunk_duration >= max_duration
             is_last = (i == len(words) - 1)
             
@@ -60,8 +126,7 @@ class CaptionLayoutEngine:
                 end_frame = int(round(end_time * fps))
                 
                 # Layout specific defaults
-                coords = NormalizedCoordinatesModel(x=0.5, y=0.82, width=0.85, height=0.15)
-                bg = BackgroundModel(enabled=(layout_family == "boxed"))
+                coords, bg, typo = CaptionLayoutEngine.get_layout_defaults(layout_family)
                 
                 caption = CaptionModel(
                     caption_id=f"cap_{caption_idx:03d}",
@@ -73,7 +138,7 @@ class CaptionLayoutEngine:
                     words=list(current_chunk),
                     layout_family=layout_family,
                     coordinates=coords,
-                    typography=TypographyModel(),
+                    typography=typo,
                     background=bg,
                     animation=AnimationConfigModel()
                 )
@@ -85,6 +150,7 @@ class CaptionLayoutEngine:
         if current_chunk:
             start_time = current_chunk[0].start
             end_time = current_chunk[-1].end
+            coords, bg, typo = CaptionLayoutEngine.get_layout_defaults(layout_family)
             captions.append(
                 CaptionModel(
                     caption_id=f"cap_{caption_idx:03d}",
@@ -95,9 +161,9 @@ class CaptionLayoutEngine:
                     duration=round(end_time - start_time, 2),
                     words=list(current_chunk),
                     layout_family=layout_family,
-                    coordinates=NormalizedCoordinatesModel(),
-                    typography=TypographyModel(),
-                    background=BackgroundModel(enabled=(layout_family == "boxed")),
+                    coordinates=coords,
+                    typography=typo,
+                    background=bg,
                     animation=AnimationConfigModel()
                 )
             )

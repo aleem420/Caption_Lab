@@ -9,13 +9,14 @@ import {
   ArrowRight,
   Clock,
   CheckCircle2,
+  FileText,
 } from 'lucide-react';
 import { useProjectStore } from '../../store/projectStore';
 import { PremiereBridge, SequenceInfo } from '../../services/premiereBridge';
 import { EngineApiClient } from '../../services/api';
 
 export const HomeTab: React.FC = () => {
-  const { project, setTab } = useProjectStore();
+  const { project, setTab, createNewProject, loadProjectFromServer } = useProjectStore();
   const [seqInfo, setSeqInfo] = useState<SequenceInfo | null>(null);
   const [recentList, setRecentList] = useState<any[]>([]);
 
@@ -27,6 +28,18 @@ export const HomeTab: React.FC = () => {
       })
       .catch(() => {});
   }, []);
+
+  const handleCreateNew = () => {
+    createNewProject(undefined, seqInfo?.width, seqInfo?.height, seqInfo?.fps);
+    setTab('transcribe');
+  };
+
+  const handleOpenRecent = async (projectId: string) => {
+    const success = await loadProjectFromServer(projectId);
+    if (success) {
+      setTab('editor');
+    }
+  };
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-6 overflow-y-auto h-full">
@@ -45,7 +58,7 @@ export const HomeTab: React.FC = () => {
           </p>
         </div>
         <button
-          onClick={() => setTab('transcribe')}
+          onClick={handleCreateNew}
           className="flex items-center space-x-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-lg shadow-md hover:shadow-blue-600/20 transition shrink-0"
         >
           <Mic className="w-4 h-4" />
@@ -75,11 +88,11 @@ export const HomeTab: React.FC = () => {
           </div>
           <div className="bg-zinc-950/70 p-2.5 rounded-lg border border-zinc-800/80">
             <span className="text-[10px] text-zinc-500 uppercase tracking-wider block">Resolution</span>
-            <span className="font-medium text-zinc-200 block mt-0.5">{seqInfo?.width} × {seqInfo?.height} (16:9)</span>
+            <span className="font-medium text-zinc-200 block mt-0.5">{seqInfo?.width || 1920} × {seqInfo?.height || 1080} (16:9)</span>
           </div>
           <div className="bg-zinc-950/70 p-2.5 rounded-lg border border-zinc-800/80">
             <span className="text-[10px] text-zinc-500 uppercase tracking-wider block">Frame Rate</span>
-            <span className="font-medium text-zinc-200 block mt-0.5">{seqInfo?.fps} FPS (Deterministic)</span>
+            <span className="font-medium text-zinc-200 block mt-0.5">{seqInfo?.fps || 30} FPS (Deterministic)</span>
           </div>
           <div className="bg-zinc-950/70 p-2.5 rounded-lg border border-zinc-800/80">
             <span className="text-[10px] text-zinc-500 uppercase tracking-wider block">Language Mode</span>
@@ -161,6 +174,33 @@ export const HomeTab: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Recent Projects Section */}
+      {recentList.length > 0 && (
+        <div className="space-y-2">
+          <h2 className="text-xs font-semibold text-zinc-300 uppercase tracking-wider">
+            Recent Projects
+          </h2>
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl divide-y divide-zinc-800/80">
+            {recentList.map((item, idx) => (
+              <div key={idx} className="p-3 flex items-center justify-between hover:bg-zinc-800/40 transition">
+                <div>
+                  <div className="font-semibold text-zinc-200">{item.name || item.id}</div>
+                  <div className="text-[10px] text-zinc-500 mt-0.5">
+                    {item.updated_at ? new Date(item.updated_at).toLocaleString() : 'Recent'} • {item.fps || 30} FPS
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleOpenRecent(item.id)}
+                  className="px-2.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-[11px] transition"
+                >
+                  Open in Editor
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

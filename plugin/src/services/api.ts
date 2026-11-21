@@ -207,13 +207,29 @@ export class EngineApiClient {
       },
       body: JSON.stringify(projectData),
     });
+    if (!response.ok) {
+      const err = await response.text();
+      throw new Error(`Failed to save project: ${err}`);
+    }
     return response.json();
   }
 
-  static async listRecentProjects() {
+  static async getProject(projectId: string): Promise<any> {
+    const response = await fetch(`${ENGINE_BASE_URL}/projects/get/${encodeURIComponent(projectId)}`, {
+      headers: this.token ? { 'X-CaptionLab-Token': this.token } : {},
+    });
+    if (!response.ok) {
+      const err = await response.text();
+      throw new Error(`Failed to load project: ${err}`);
+    }
+    return response.json();
+  }
+
+  static async listRecentProjects(): Promise<any[]> {
     const response = await fetch(`${ENGINE_BASE_URL}/projects/recent`, {
       headers: this.token ? { 'X-CaptionLab-Token': this.token } : {},
     });
+    if (!response.ok) return [];
     return response.json();
   }
 }

@@ -10,6 +10,7 @@ import {
   BackgroundStyle,
   AnimationConfig,
 } from '../types';
+import { EngineApiClient } from '../services/api';
 
 export type NavigationTab =
   | 'home'
@@ -365,6 +366,15 @@ const DEFAULT_PROJECT: CaptionLabProject = {
 
 DEFAULT_PROJECT.transcript.words = DEFAULT_PROJECT.transcript.sentences.flatMap((s) => s.words);
 
+let autoSaveTimer: any = null;
+
+const scheduleAutoSave = (saveFn: () => Promise<boolean>) => {
+  if (autoSaveTimer) clearTimeout(autoSaveTimer);
+  autoSaveTimer = setTimeout(() => {
+    saveFn().catch(() => {});
+  }, 1500);
+};
+
 interface ProjectStoreState {
   currentTab: NavigationTab;
   project: CaptionLabProject;
@@ -376,6 +386,12 @@ interface ProjectStoreState {
   historyStack: CaptionLabProject[];
   redoStack: CaptionLabProject[];
 
+  // Persistence State
+  isSaving: boolean;
+  isDirty: boolean;
+  lastSavedAt: string | null;
+  saveError: string | null;
+
   // Actions
   setTab: (tab: NavigationTab) => void;
   setProject: (project: CaptionLabProject) => void;
@@ -385,14 +401,27 @@ interface ProjectStoreState {
   setIsPlaying: (playing: boolean) => void;
   setEngineConnected: (connected: boolean) => void;
 
-  // Editing Actions (PRD Section 7 & 9)
+  // Persistence Actions
+  createNewProject: (name?: string, width?: number, height?: number, fps?: number) => void;
+  saveProjectToServer: () => Promise<boolean>;
+  loadProjectFromServer: (projectId: string) => Promise<boolean>;
+  markDirty: () => void;
+
+  // Editing Actions (PRD Section 7 & 9, Milestone 4.2)
   updateWordText: (wordId: string, newText: string) => void;
   updateWordTiming: (wordId: string, start: number, end: number) => void;
   setWordHighlightColor: (wordId: string, color?: string) => void;
+  splitSentence: (sentenceId: string, wordIndex: number) => void;
+  mergeSentences: (sentenceId1: string, sentenceId2: string) => void;
+  addCaption: (afterCaptionId?: string) => void;
+  deleteCaption: (captionId: string) => void;
+  recalculateCaptionGroupings: () => Promise<void>;
   updateCaptionTypography: (captionId: string, updates: Partial<TypographyStyle>) => void;
   updateCaptionBackground: (captionId: string, updates: Partial<BackgroundStyle>) => void;
   updateCaptionLayout: (captionId: string, layout: LayoutFamily) => void;
   updateCaptionCoordinates: (captionId: string, x: number, y: number) => void;
+  updateCaptionAnimation: (captionId: string, updates: Partial<AnimationConfig>) => void;
+  updateAllCaptionsAnimation: (updates: Partial<AnimationConfig>) => void;
   applyPresetToCaption: (captionId: string, presetId: string) => void;
   applyPresetToAllCaptions: (presetId: string) => void;
 
@@ -411,13 +440,120 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
   historyStack: [],
   redoStack: [],
 
+  // Persistence State Defaults
+  isSaving: false,
+  isDirty: false,
+  lastSavedAt: null,
+  saveError: null,
+
   setTab: (tab) => set({ currentTab: tab }),
-  setProject: (project) => set({ project, activeCaptionId: project.captions[0]?.caption_id || null }),
+  setProject: (project) =>
+    set({
+      project,
+      activeCaptionId: project.captions[0]?.caption_id || null,
+      isDirty: false,
+    }),
   setActiveCaptionId: (id) => set({ activeCaptionId: id }),
   setActiveWordId: (id) => set({ activeWordId: id }),
   setCurrentTime: (time) => set({ currentTime: time }),
   setIsPlaying: (playing) => set({ isPlaying: playing }),
   setEngineConnected: (connected) => set({ engineConnected: connected }),
+
+  createNewProject: (name?: string, width?: number, height?: number, fps?: number) => {
+    const newProj: CaptionLabProject = {
+      project: {
+        id: `proj_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        name: name || 'Untitled CaptionLab Project',
+        version: '1.2.0',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        fps: fps || 30,
+        width: width || 1920,
+        height: height || 1080,
+      },
+      transcript: {
+        language: 'hindi_mixed',
+        engine: 'faster-whisper',
+        model_size: 'small',
+        sentences: [],
+        words: [],
+      },
+      captions: [],
+      presets: INITIAL_PRESETS,
+    };
+    set({
+      project: newProj,
+      activeCaptionId: null,
+      activeWordId: null,
+      currentTime: 0,
+      isPlaying: false,
+      historyStack: [],
+      redoStack: [],
+      isDirty: false,
+      lastSavedAt: null,
+      saveError: null,
+    });
+  },
+
+  saveProjectToServer: async () => {
+    const { project } = get();
+    set({ isSaving: true, saveError: null });
+    try {
+      const cloned = JSON.parse(JSON.stringify(project)) as CaptionLabProject;
+      cloned.project.updated_at = new Date().toISOString();
+      await EngineApiClient.saveProject(cloned);
+      set({
+        project: cloned,
+        isSaving: false,
+        isDirty: false,
+        lastSavedAt: new Date().toLocaleTimeString(),
+        saveError: null,
+      });
+      return true;
+    } catch (err: any) {
+      set({
+        isSaving: false,
+        saveError: err.message || 'Failed to save project',
+      });
+      return false;
+    }
+  },
+
+  loadProjectFromServer: async (projectId: string) => {
+    set({ isSaving: true, saveError: null });
+    try {
+      const loaded = await EngineApiClient.getProject(projectId);
+      if (loaded && loaded.project) {
+        set({
+          project: loaded,
+          activeCaptionId: loaded.captions?.[0]?.caption_id || null,
+          activeWordId: null,
+          currentTime: 0,
+          isPlaying: false,
+          historyStack: [],
+          redoStack: [],
+          isSaving: false,
+          isDirty: false,
+          lastSavedAt: new Date().toLocaleTimeString(),
+          saveError: null,
+        });
+        return true;
+      } else {
+        throw new Error('Invalid project structure returned by engine');
+      }
+    } catch (err: any) {
+      set({
+        isSaving: false,
+        saveError: err.message || 'Failed to load project',
+      });
+      return false;
+    }
+  },
+
+  markDirty: () => {
+    set({ isDirty: true });
+    scheduleAutoSave(get().saveProjectToServer);
+  },
 
   updateWordText: (wordId, newText) => {
     const { project, historyStack } = get();
@@ -452,11 +588,15 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
       });
     });
 
+    cloned.project.updated_at = new Date().toISOString();
+
     set({
       historyStack: [...historyStack.slice(-20), project],
       redoStack: [],
       project: cloned,
+      isDirty: true,
     });
+    scheduleAutoSave(get().saveProjectToServer);
   },
 
   updateWordTiming: (wordId, start, end) => {
@@ -474,12 +614,15 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
     cloned.transcript.words.forEach(updateW);
     cloned.transcript.sentences.forEach((s) => s.words.forEach(updateW));
     cloned.captions.forEach((c) => c.words.forEach(updateW));
+    cloned.project.updated_at = new Date().toISOString();
 
     set({
       historyStack: [...historyStack.slice(-20), project],
       redoStack: [],
       project: cloned,
+      isDirty: true,
     });
+    scheduleAutoSave(get().saveProjectToServer);
   },
 
   setWordHighlightColor: (wordId, color) => {
@@ -493,7 +636,187 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
         }
       });
     });
-    set({ project: cloned });
+    cloned.project.updated_at = new Date().toISOString();
+    set({ project: cloned, isDirty: true });
+    scheduleAutoSave(get().saveProjectToServer);
+  },
+
+  splitSentence: (sentenceId, wordIndex) => {
+    const { project, historyStack } = get();
+    const cloned = JSON.parse(JSON.stringify(project)) as CaptionLabProject;
+    const sIdx = cloned.transcript.sentences.findIndex((s) => s.sentence_id === sentenceId);
+    if (sIdx === -1) return;
+    const target = cloned.transcript.sentences[sIdx];
+    if (wordIndex <= 0 || wordIndex >= target.words.length) return;
+
+    const words1 = target.words.slice(0, wordIndex);
+    const words2 = target.words.slice(wordIndex);
+
+    const s1: SentenceSegment = {
+      sentence_id: target.sentence_id,
+      speaker_id: target.speaker_id,
+      start: words1[0].start,
+      end: words1[words1.length - 1].end,
+      text: words1.map((w) => w.text).join(' '),
+      words: words1,
+    };
+
+    const s2: SentenceSegment = {
+      sentence_id: `s_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      speaker_id: target.speaker_id,
+      start: words2[0].start,
+      end: words2[words2.length - 1].end,
+      text: words2.map((w) => w.text).join(' '),
+      words: words2,
+    };
+
+    cloned.transcript.sentences.splice(sIdx, 1, s1, s2);
+    cloned.transcript.words = cloned.transcript.sentences.flatMap((s) => s.words);
+    cloned.project.updated_at = new Date().toISOString();
+
+    set({
+      historyStack: [...historyStack.slice(-20), project],
+      redoStack: [],
+      project: cloned,
+      isDirty: true,
+    });
+    scheduleAutoSave(get().saveProjectToServer);
+  },
+
+  mergeSentences: (sentenceId1, sentenceId2) => {
+    const { project, historyStack } = get();
+    const cloned = JSON.parse(JSON.stringify(project)) as CaptionLabProject;
+    const sIdx1 = cloned.transcript.sentences.findIndex((s) => s.sentence_id === sentenceId1);
+    const sIdx2 = cloned.transcript.sentences.findIndex((s) => s.sentence_id === sentenceId2);
+    if (sIdx1 === -1 || sIdx2 === -1) return;
+
+    const s1 = cloned.transcript.sentences[sIdx1];
+    const s2 = cloned.transcript.sentences[sIdx2];
+
+    const mergedWords = [...s1.words, ...s2.words].sort((a, b) => a.start - b.start);
+    s1.words = mergedWords;
+    s1.start = mergedWords[0]?.start ?? s1.start;
+    s1.end = mergedWords[mergedWords.length - 1]?.end ?? s1.end;
+    s1.text = mergedWords.map((w) => w.text).join(' ');
+
+    cloned.transcript.sentences.splice(sIdx2, 1);
+    cloned.transcript.words = cloned.transcript.sentences.flatMap((s) => s.words);
+    cloned.project.updated_at = new Date().toISOString();
+
+    set({
+      historyStack: [...historyStack.slice(-20), project],
+      redoStack: [],
+      project: cloned,
+      isDirty: true,
+    });
+    scheduleAutoSave(get().saveProjectToServer);
+  },
+
+  addCaption: (afterCaptionId) => {
+    const { project, historyStack, currentTime } = get();
+    const cloned = JSON.parse(JSON.stringify(project)) as CaptionLabProject;
+    const defaultPreset = cloned.presets[0] || INITIAL_PRESETS[0];
+
+    const newCapId = `cap_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    let insertIdx = cloned.captions.length;
+    let startTime = currentTime;
+    let endTime = currentTime + 2.0;
+
+    if (afterCaptionId) {
+      const idx = cloned.captions.findIndex((c) => c.caption_id === afterCaptionId);
+      if (idx !== -1) {
+        insertIdx = idx + 1;
+        startTime = cloned.captions[idx].end_time;
+        endTime = startTime + 2.0;
+      }
+    }
+
+    const fps = cloned.project.fps || 30;
+    const newCaption: CaptionItem = {
+      caption_id: newCapId,
+      start_frame: Math.round(startTime * fps),
+      end_frame: Math.round(endTime * fps),
+      start_time: startTime,
+      end_time: endTime,
+      duration: Math.max(0.1, endTime - startTime),
+      words: [],
+      layout_family: defaultPreset.layout_family,
+      coordinates: { x: 0.5, y: 0.82, width: 0.85, height: 0.15 },
+      typography: { ...defaultPreset.typography },
+      background: { ...defaultPreset.background },
+      animation: { ...defaultPreset.animation },
+      user_overridden_properties: [],
+    };
+
+    cloned.captions.splice(insertIdx, 0, newCaption);
+    cloned.project.updated_at = new Date().toISOString();
+
+    set({
+      historyStack: [...historyStack.slice(-20), project],
+      redoStack: [],
+      project: cloned,
+      activeCaptionId: newCapId,
+      isDirty: true,
+    });
+    scheduleAutoSave(get().saveProjectToServer);
+  },
+
+  deleteCaption: (captionId) => {
+    const { project, historyStack, activeCaptionId } = get();
+    const cloned = JSON.parse(JSON.stringify(project)) as CaptionLabProject;
+    const idx = cloned.captions.findIndex((c) => c.caption_id === captionId);
+    if (idx === -1) return;
+
+    cloned.captions.splice(idx, 1);
+    const nextActive = cloned.captions[idx]?.caption_id || cloned.captions[idx - 1]?.caption_id || null;
+    cloned.project.updated_at = new Date().toISOString();
+
+    set({
+      historyStack: [...historyStack.slice(-20), project],
+      redoStack: [],
+      project: cloned,
+      activeCaptionId: activeCaptionId === captionId ? nextActive : activeCaptionId,
+      isDirty: true,
+    });
+    scheduleAutoSave(get().saveProjectToServer);
+  },
+
+  recalculateCaptionGroupings: async () => {
+    const { project, historyStack } = get();
+    const words =
+      project.transcript.words.length > 0
+        ? project.transcript.words
+        : project.transcript.sentences.flatMap((s) => s.words);
+    if (words.length === 0) return;
+
+    const fps = project.project.fps || 30;
+    const defaultLayout = project.captions[0]?.layout_family || 'balanced_two_line';
+
+    try {
+      const groupedCaptions = await EngineApiClient.autoGroupCaptions(words, defaultLayout, fps);
+      if (Array.isArray(groupedCaptions) && groupedCaptions.length > 0) {
+        const cloned = JSON.parse(JSON.stringify(project)) as CaptionLabProject;
+        const defaultPreset = cloned.presets[0] || INITIAL_PRESETS[0];
+        groupedCaptions.forEach((c) => {
+          c.typography = { ...defaultPreset.typography, ...c.typography };
+          c.background = { ...defaultPreset.background, ...c.background };
+          c.animation = { ...defaultPreset.animation, ...c.animation };
+        });
+        cloned.captions = groupedCaptions;
+        cloned.project.updated_at = new Date().toISOString();
+
+        set({
+          historyStack: [...historyStack.slice(-20), project],
+          redoStack: [],
+          project: cloned,
+          activeCaptionId: groupedCaptions[0]?.caption_id || null,
+          isDirty: true,
+        });
+        scheduleAutoSave(get().saveProjectToServer);
+      }
+    } catch (err) {
+      console.error('Failed to recalculate caption groupings:', err);
+    }
   },
 
   updateCaptionTypography: (captionId, updates) => {
@@ -511,11 +834,14 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
         });
       }
     });
+    cloned.project.updated_at = new Date().toISOString();
     set({
       historyStack: [...historyStack.slice(-20), project],
       redoStack: [],
       project: cloned,
+      isDirty: true,
     });
+    scheduleAutoSave(get().saveProjectToServer);
   },
 
   updateCaptionBackground: (captionId, updates) => {
@@ -532,11 +858,14 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
         });
       }
     });
+    cloned.project.updated_at = new Date().toISOString();
     set({
       historyStack: [...historyStack.slice(-20), project],
       redoStack: [],
       project: cloned,
+      isDirty: true,
     });
+    scheduleAutoSave(get().saveProjectToServer);
   },
 
   updateCaptionLayout: (captionId, layout) => {
@@ -550,7 +879,9 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
         }
       }
     });
-    set({ project: cloned });
+    cloned.project.updated_at = new Date().toISOString();
+    set({ project: cloned, isDirty: true });
+    scheduleAutoSave(get().saveProjectToServer);
   },
 
   updateCaptionCoordinates: (captionId, x, y) => {
@@ -565,7 +896,57 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
         }
       }
     });
-    set({ project: cloned });
+    cloned.project.updated_at = new Date().toISOString();
+    set({ project: cloned, isDirty: true });
+    scheduleAutoSave(get().saveProjectToServer);
+  },
+
+  updateCaptionAnimation: (captionId, updates) => {
+    const { project, historyStack } = get();
+    const cloned = JSON.parse(JSON.stringify(project)) as CaptionLabProject;
+    cloned.captions.forEach((c) => {
+      if (c.caption_id === captionId) {
+        c.animation = {
+          ...c.animation,
+          ...updates,
+          entrance: updates.entrance ? { ...c.animation.entrance, ...updates.entrance } : c.animation.entrance,
+          emphasis: updates.emphasis ? { ...c.animation.emphasis, ...updates.emphasis } : c.animation.emphasis,
+          exit: updates.exit ? { ...c.animation.exit, ...updates.exit } : c.animation.exit,
+          word_animation: updates.word_animation ? { ...c.animation.word_animation, ...updates.word_animation } : c.animation.word_animation,
+        };
+      }
+    });
+    cloned.project.updated_at = new Date().toISOString();
+    set({
+      historyStack: [...historyStack.slice(-20), project],
+      redoStack: [],
+      project: cloned,
+      isDirty: true,
+    });
+    scheduleAutoSave(get().saveProjectToServer);
+  },
+
+  updateAllCaptionsAnimation: (updates) => {
+    const { project, historyStack } = get();
+    const cloned = JSON.parse(JSON.stringify(project)) as CaptionLabProject;
+    cloned.captions.forEach((c) => {
+      c.animation = {
+        ...c.animation,
+        ...updates,
+        entrance: updates.entrance ? { ...c.animation.entrance, ...updates.entrance } : c.animation.entrance,
+        emphasis: updates.emphasis ? { ...c.animation.emphasis, ...updates.emphasis } : c.animation.emphasis,
+        exit: updates.exit ? { ...c.animation.exit, ...updates.exit } : c.animation.exit,
+        word_animation: updates.word_animation ? { ...c.animation.word_animation, ...updates.word_animation } : c.animation.word_animation,
+      };
+    });
+    cloned.project.updated_at = new Date().toISOString();
+    set({
+      historyStack: [...historyStack.slice(-20), project],
+      redoStack: [],
+      project: cloned,
+      isDirty: true,
+    });
+    scheduleAutoSave(get().saveProjectToServer);
   },
 
   applyPresetToCaption: (captionId, presetId) => {
@@ -595,11 +976,15 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
       }
     });
 
+    cloned.project.updated_at = new Date().toISOString();
+
     set({
       historyStack: [...historyStack.slice(-20), project],
       redoStack: [],
       project: cloned,
+      isDirty: true,
     });
+    scheduleAutoSave(get().saveProjectToServer);
   },
 
   applyPresetToAllCaptions: (presetId) => {
@@ -627,11 +1012,15 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
       c.animation = { ...preset.animation };
     });
 
+    cloned.project.updated_at = new Date().toISOString();
+
     set({
       historyStack: [...historyStack.slice(-20), project],
       redoStack: [],
       project: cloned,
+      isDirty: true,
     });
+    scheduleAutoSave(get().saveProjectToServer);
   },
 
   undo: () => {
@@ -642,7 +1031,9 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
       historyStack: historyStack.slice(0, -1),
       redoStack: [project, ...redoStack],
       project: previous,
+      isDirty: true,
     });
+    scheduleAutoSave(get().saveProjectToServer);
   },
 
   redo: () => {
@@ -653,6 +1044,8 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
       redoStack: redoStack.slice(1),
       historyStack: [...historyStack, project],
       project: next,
+      isDirty: true,
     });
+    scheduleAutoSave(get().saveProjectToServer);
   },
 }));

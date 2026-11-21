@@ -1,57 +1,117 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   Sparkles,
   Zap,
   Play,
+  Pause,
   RotateCw,
   Film,
   Layers,
   Sliders,
+  CheckCircle2,
 } from 'lucide-react';
 import { useProjectStore } from '../../store/projectStore';
 import { WordAnimationType, EntranceAnimationType, ExitAnimationType } from '../../types';
 
 export const AnimationEditorTab: React.FC = () => {
-  const { project, activeCaptionId, currentTime, setCurrentTime, isPlaying, setIsPlaying } =
-    useProjectStore();
+  const {
+    project,
+    activeCaptionId,
+    currentTime,
+    setCurrentTime,
+    isPlaying,
+    setIsPlaying,
+    updateCaptionAnimation,
+    updateAllCaptionsAnimation,
+  } = useProjectStore();
 
   const activeCaption =
     project.captions.find((c) => c.caption_id === activeCaptionId) || project.captions[0];
 
+  // Playback loop for animation preview
+  useEffect(() => {
+    let animId: number;
+    if (isPlaying) {
+      let lastTime = performance.now();
+      const tick = (now: number) => {
+        const delta = (now - lastTime) / 1000;
+        lastTime = now;
+        const maxTime = project.captions.length > 0
+          ? Math.max(...project.captions.map((c) => c.end_time))
+          : 10;
+        const nextTime = useProjectStore.getState().currentTime + delta;
+        if (nextTime >= maxTime) {
+          setCurrentTime(maxTime);
+          setIsPlaying(false);
+        } else {
+          setCurrentTime(nextTime);
+          animId = requestAnimationFrame(tick);
+        }
+      };
+      animId = requestAnimationFrame(tick);
+    }
+    return () => cancelAnimationFrame(animId);
+  }, [isPlaying, project.captions, setCurrentTime, setIsPlaying]);
+
   const wordAnimations: { id: WordAnimationType; label: string; desc: string }[] = [
     { id: 'karaoke_highlight', label: 'Karaoke Highlight', desc: 'Active spoken word changes color smoothly' },
-    { id: 'word_pop', label: 'Word Pop (Reels/Shorts)', desc: 'Spoken word scales up with a punchy bounce' },
+    { id: 'word_pop', label: 'Word Pop (Reels/Shorts)', desc: 'Spoken word scales up to 1.15x with punchy bounce' },
     { id: 'sequential_reveal', label: 'Sequential Reveal', desc: 'Words appear one by one as spoken' },
     { id: 'active_word_highlight', label: 'Active Word Focus', desc: 'Subtle highlight on the currently spoken word' },
     { id: 'none', label: 'Static Text', desc: 'No word-by-word animation' },
   ];
 
   const entranceAnimations: { id: EntranceAnimationType; label: string }[] = [
+    { id: 'pop_in', label: 'Pop In (0.8x to 1.0x Ease-Out)' },
     { id: 'fade_in', label: 'Fade In' },
-    { id: 'pop_in', label: 'Pop In (Bounce)' },
     { id: 'slide_in', label: 'Slide Up' },
     { id: 'type_reveal', label: 'Typewriter' },
     { id: 'none', label: 'Cut (Instant)' },
   ];
 
+  const exitAnimations: { id: ExitAnimationType; label: string }[] = [
+    { id: 'fade_out', label: 'Smooth Alpha Fade Out' },
+    { id: 'slide_out', label: 'Slide Down / Out' },
+    { id: 'shrink', label: 'Shrink Out' },
+    { id: 'none', label: 'Hard Cut (Instant)' },
+  ];
+
+  const totalDuration = project.captions.length > 0
+    ? Math.max(...project.captions.map((c) => c.end_time))
+    : 10.0;
+
   return (
-    <div className="p-6 max-w-4xl mx-auto space-y-6 overflow-y-auto h-full">
+    <div className="p-6 max-w-4xl mx-auto space-y-6 overflow-y-auto h-full text-xs">
       <div className="space-y-1">
         <h2 className="text-base font-bold text-white flex items-center space-x-2">
           <Sparkles className="w-4 h-4 text-amber-400" />
           <span>Motion Graphics & Word-by-Word Animations</span>
         </h2>
         <p className="text-xs text-zinc-400">
-          Deterministic rational frame-timing for YouTube Shorts, Reels, and Cinematic content. Hindi words are treated as whole grapheme units.
+          Deterministic rational frame-timing for YouTube Shorts, Reels, and Cinematic content. Hindi words are treated as whole grapheme units with baseline locking.
         </p>
       </div>
 
       {/* Word-level Animation Grid */}
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 space-y-3">
-        <label className="text-xs font-semibold text-zinc-200 flex items-center space-x-1.5">
-          <Zap className="w-3.5 h-3.5 text-amber-400" />
-          <span>Word-Level Animation Engine (PRD Section 12.6)</span>
-        </label>
+        <div className="flex items-center justify-between">
+          <label className="text-xs font-semibold text-zinc-200 flex items-center space-x-1.5">
+            <Zap className="w-3.5 h-3.5 text-amber-400" />
+            <span>Word-Level Animation Engine (PRD Section 12.6)</span>
+          </label>
+          {activeCaption && (
+            <button
+              onClick={() =>
+                updateAllCaptionsAnimation({
+                  word_animation: { ...activeCaption.animation.word_animation },
+                })
+              }
+              className="text-[10px] text-zinc-400 hover:text-zinc-200 px-2 py-0.5 rounded bg-zinc-800 transition"
+            >
+              Apply Word Animation to All
+            </button>
+          )}
+        </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
           {wordAnimations.map((anim) => {
@@ -61,7 +121,13 @@ export const AnimationEditorTab: React.FC = () => {
                 key={anim.id}
                 onClick={() => {
                   if (activeCaption) {
-                    activeCaption.animation.word_animation.type = anim.id as any;
+                    updateCaptionAnimation(activeCaption.caption_id, {
+                      word_animation: {
+                        ...activeCaption.animation.word_animation,
+                        type: anim.id,
+                        active_scale: anim.id === 'word_pop' ? 1.15 : 1.1,
+                      },
+                    });
                   }
                 }}
                 className={`p-3 rounded-lg border cursor-pointer transition ${
@@ -79,7 +145,8 @@ export const AnimationEditorTab: React.FC = () => {
       </div>
 
       {/* Entrance and Exit Transitions */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {/* Entrance */}
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 space-y-3">
           <span className="text-xs font-semibold text-zinc-200 block">Entrance Animation</span>
           <div className="space-y-1.5">
@@ -87,7 +154,15 @@ export const AnimationEditorTab: React.FC = () => {
               <button
                 key={ent.id}
                 onClick={() => {
-                  if (activeCaption) activeCaption.animation.entrance.type = ent.id as any;
+                  if (activeCaption) {
+                    updateCaptionAnimation(activeCaption.caption_id, {
+                      entrance: {
+                        ...activeCaption.animation.entrance,
+                        type: ent.id,
+                        duration_frames: 6,
+                      },
+                    });
+                  }
                 }}
                 className={`w-full py-1.5 px-3 rounded text-left text-xs transition border ${
                   activeCaption?.animation.entrance.type === ent.id
@@ -101,6 +176,37 @@ export const AnimationEditorTab: React.FC = () => {
           </div>
         </div>
 
+        {/* Exit */}
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 space-y-3">
+          <span className="text-xs font-semibold text-zinc-200 block">Exit Transition</span>
+          <div className="space-y-1.5">
+            {exitAnimations.map((ex) => (
+              <button
+                key={ex.id}
+                onClick={() => {
+                  if (activeCaption) {
+                    updateCaptionAnimation(activeCaption.caption_id, {
+                      exit: {
+                        ...activeCaption.animation.exit,
+                        type: ex.id,
+                        duration_frames: 5,
+                      },
+                    });
+                  }
+                }}
+                className={`w-full py-1.5 px-3 rounded text-left text-xs transition border ${
+                  activeCaption?.animation.exit.type === ex.id
+                    ? 'border-purple-500 bg-purple-950/30 text-white font-medium'
+                    : 'border-zinc-800 bg-zinc-950 text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                {ex.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Karaoke Color */}
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 space-y-3">
           <span className="text-xs font-semibold text-zinc-200 block">Karaoke Highlight Color</span>
           <div className="space-y-2">
@@ -110,7 +216,14 @@ export const AnimationEditorTab: React.FC = () => {
                 <button
                   key={color}
                   onClick={() => {
-                    if (activeCaption) activeCaption.animation.word_animation.active_color = color;
+                    if (activeCaption) {
+                      updateCaptionAnimation(activeCaption.caption_id, {
+                        word_animation: {
+                          ...activeCaption.animation.word_animation,
+                          active_color: color,
+                        },
+                      });
+                    }
                   }}
                   style={{ backgroundColor: color }}
                   className="w-7 h-7 rounded-full border border-zinc-700 hover:scale-110 transition shadow"
@@ -118,7 +231,7 @@ export const AnimationEditorTab: React.FC = () => {
               ))}
             </div>
             <span className="text-[10px] text-zinc-500 block pt-1">
-              Currently active: {activeCaption?.animation.word_animation.active_color || '#FFDF00'}
+              Active: {activeCaption?.animation.word_animation.active_color || '#FFDF00'}
             </span>
           </div>
         </div>
@@ -128,12 +241,14 @@ export const AnimationEditorTab: React.FC = () => {
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 space-y-3">
         <div className="flex items-center justify-between text-xs">
           <span className="font-semibold text-zinc-300">Live Animation Scrubber</span>
-          <span className="font-mono text-zinc-400">{currentTime.toFixed(2)}s / 5.00s</span>
+          <span className="font-mono text-zinc-400">
+            {currentTime.toFixed(2)}s / {totalDuration.toFixed(2)}s
+          </span>
         </div>
         <input
           type="range"
           min="0"
-          max="5.0"
+          max={totalDuration}
           step="0.05"
           value={currentTime}
           onChange={(e) => setCurrentTime(parseFloat(e.target.value))}
@@ -144,7 +259,17 @@ export const AnimationEditorTab: React.FC = () => {
             onClick={() => setIsPlaying(!isPlaying)}
             className="flex items-center space-x-1.5 px-4 py-1.5 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs rounded-lg shadow transition"
           >
-            {isPlaying ? 'Pause Animation' : 'Play Live Motion'}
+            {isPlaying ? (
+              <>
+                <Pause className="w-3.5 h-3.5" />
+                <span>Pause Motion</span>
+              </>
+            ) : (
+              <>
+                <Play className="w-3.5 h-3.5 fill-zinc-950" />
+                <span>Play Live Motion</span>
+              </>
+            )}
           </button>
         </div>
       </div>
